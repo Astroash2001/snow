@@ -2,7 +2,7 @@
 
 ## Overview
 
-Snow is built in the order that lets it help build itself. Phase 1 delivers an always-on voice loop (wake phrase or push-to-talk, local speech-to-text, LLM reply, human voice with a local fallback) on top of the event bus, supervisor, secrets store and CI that everything else depends on. Phase 2 puts Claude Code under voice control behind a deterministic safety gate (risk tiers, fail-closed approvals, a kill switch outside the LLM, speaker verification); from the end of Phase 2 the user drives Snow's own development through Snow, with a stable running copy building a separate dev copy. Phase 3 makes agent work steerable, honest and reversible (status, redirect, fact-based summaries, worktree isolation, accept or discard). Phase 4 lets the user walk away: background tasks, Snow's Telegram bot over Tailscale, presence-routed approvals and a task board. Phase 5 extends voice control to the whole PC. Phase 6 delivers the full glass-box HUD with the Jarvis-style ASCII network orb, the corner widget and the phone view. Phase 7 ships Snow as an installable, self-updating, private product.
+Snow is built in the order that lets it help build itself. Phase 1 delivers an always-on voice loop (wake phrase, local speech-to-text, LLM reply, human voice with a local fallback) on top of the event bus, supervisor, secrets store and CI that everything else depends on. Phase 2 puts Claude Code under voice control behind a deterministic safety gate (risk tiers, fail-closed approvals, a kill switch outside the LLM, speaker verification); from the end of Phase 2 the user drives Snow's own development through Snow, with a stable running copy building a separate dev copy. Phase 3 makes agent work steerable, honest and reversible (status, redirect, fact-based summaries, worktree isolation, accept or discard). Phase 4 lets the user walk away: background tasks, Snow's Telegram bot over Tailscale, presence-routed approvals and a task board. Phase 5 extends voice control to the whole PC. Phase 6 delivers the full glass-box HUD with the Jarvis-style ASCII network orb, the corner widget and the phone view. Phase 7 ships Snow as an installable, self-updating, private product.
 
 ## Phases
 
@@ -12,7 +12,7 @@ Snow is built in the order that lets it help build itself. Phase 1 delivers an a
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Always-On Voice Loop** - Say "Hey Snow" or hold push-to-talk, talk naturally, hear a fast human reply; event bus, supervisor, secrets store and CI in place
+- [ ] **Phase 1: Always-On Voice Loop** - Say "Hey Snow", talk naturally, hear a fast human reply; event bus, supervisor, secrets store and CI in place
 - [ ] **Phase 2: Voice-Driven Claude Code with Safety Gate** - Start, instruct, answer and stop Claude Code by voice with risk tiers, fail-closed approvals, kill switch and speaker verification (Snow starts building Snow)
 - [ ] **Phase 3: Steerable and Reviewable Agent Work** - Ask for status, redirect mid-task, hear fact-based summaries, follow the activity stream, accept or discard worktree-isolated changes
 - [ ] **Phase 4: Hand-off & Phone** - Walk away while Snow works; Telegram notifications, one-tap approvals and replies over Tailscale; task board and on-request brief
@@ -26,9 +26,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal:** As a developer, I want to wake Snow by voice and talk with it naturally, so that I can speak to my PC instead of typing.
 **Mode:** mvp
 **Depends on:** Nothing (first phase)
-**Requirements:** CORE-01, CORE-02, CORE-03, CORE-04, VOIC-01, VOIC-02, VOIC-03, VOIC-04, VOIC-05, VOIC-06, VOIC-08, SPCH-01, SPCH-02, SPCH-03, SPCH-04, HUD-03, QUAL-01, QUAL-03, SAFE-09
+**Requirements:** CORE-01, CORE-02, CORE-03, CORE-04, VOIC-01, VOIC-03, VOIC-04, VOIC-05, VOIC-06, VOIC-08, SPCH-01, SPCH-02, SPCH-03, SPCH-04, HUD-03, QUAL-01, QUAL-03, SAFE-09
 **Success Criteria** (what must be TRUE):
-  1. After the user logs in to Windows, Snow is already running; saying "Hey Snow" or pressing the push-to-talk hotkey opens a turn and the HUD shows "listening" within 100 ms, and no idle audio ever leaves the PC
+  1. After the user logs in to Windows, Snow is already running; saying "Hey Snow" opens a turn (no key needed; Snow stays in the conversation until dismissed or silent) and the HUD shows "listening" within 100 ms, and no idle audio ever leaves the PC
   2. User speaks naturally, pausing mid-thought without being cut off, watches the live transcript on the HUD, and hears an LLM-written, emotion-voiced reply start within about 1 second; speaking over Snow stops it mid-sentence and cancels the rest of the reply
   3. When Cartesia is unreachable or out of credits, Snow keeps talking in a local voice; changing the LLM provider, base URL or model for the main and fast roles is a configuration edit with no code change; API keys live in Windows Credential Manager and never appear in config files or logs
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log

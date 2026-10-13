@@ -20,7 +20,6 @@ Requirements for the first release. Each maps to one roadmap phase.
 ### Voice Input
 
 - [ ] **VOIC-01**: User can wake Snow by saying "Hey Snow"; wake detection runs locally and no idle audio leaves the PC
-- [ ] **VOIC-02**: User can talk to Snow with a push-to-talk hotkey instead of the wake phrase
 - [ ] **VOIC-03**: User can hard-mute the microphone, and the mute state is unmistakable on the HUD
 - [ ] **VOIC-04**: User's speech is transcribed locally in streaming fashion (English)
 - [ ] **VOIC-05**: Snow waits for the user to finish a thought (pauses while thinking do not cut the user off)
@@ -162,6 +161,7 @@ Acknowledged and deferred. Not in the current roadmap. Architecture must not blo
 | Auto-approve-everything / bypass mode | Always-on + voice + remote makes the blast radius too large |
 | LLM-only safety gate | Prompt injection can sway the model; hard tiers are rule-based |
 | Spoken passwords, card numbers, 2FA codes | Secrets would land in transcripts and cloud context; take-over flow instead |
+| Push-to-talk hotkey (former VOIC-02) | Removed 2026-10-14 (Phase 1 context D-07): user wakes Snow by name only, like Jarvis; revisit only if the wake word proves unreliable |
 | Streaming idle microphone audio to the cloud | Privacy by default; wake detection is local |
 | Public ntfy.sh topics for approvals | Content on a public server and spoofable; Telegram with an allow-listed chat instead |
 | Dependence on Claude `/voice` or Wispr Flow as the voice layer | Breaks provider independence; Snow owns its voice stack |
@@ -181,7 +181,6 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-06 | Phase 2 | Pending |
 | CORE-07 | Phase 3 | Pending |
 | VOIC-01 | Phase 1 | Pending |
-| VOIC-02 | Phase 1 | Pending |
 | VOIC-03 | Phase 1 | Pending |
 | VOIC-04 | Phase 1 | Pending |
 | VOIC-05 | Phase 1 | Pending |
@@ -254,10 +253,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUAL-06 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 79 total
-- Mapped to phases: 79
+- v1 requirements: 78 total (VOIC-02 removed 2026-10-14)
+- Mapped to phases: 78
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-13*
-*Last updated: 2026-10-13 after roadmap creation (added CORE-06, CORE-07 for self-building safety)*
+*Last updated: 2026-10-14 after Phase 1 context (removed VOIC-02 push-to-talk)*
