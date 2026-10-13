@@ -14,6 +14,8 @@ Requirements for the first release. Each maps to one roadmap phase.
 - [ ] **CORE-03**: Every action Snow takes is recorded as a typed event (source, reason, risk tier, result) that all views (HUD, phone, history) read from
 - [ ] **CORE-04**: The LLM provider, base URL and model for each role (main, fast) are changed by configuration only, with no code change
 - [ ] **CORE-05**: Snow remembers in-progress tasks across restarts and resumes or reports them after coming back
+- [ ] **CORE-06**: Snow runs from a pinned, versioned copy separate from any repository it works on, so coding tasks (including work on Snow itself) never edit the running copy
+- [ ] **CORE-07**: Snow switches its running copy to a newly accepted build only after the user approves, and rolls back automatically if the new build fails its health check
 
 ### Voice Input
 
@@ -171,12 +173,91 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| CORE-01 | Phase 1 | Pending |
+| CORE-02 | Phase 1 | Pending |
+| CORE-03 | Phase 1 | Pending |
+| CORE-04 | Phase 1 | Pending |
+| CORE-05 | Phase 4 | Pending |
+| CORE-06 | Phase 2 | Pending |
+| CORE-07 | Phase 3 | Pending |
+| VOIC-01 | Phase 1 | Pending |
+| VOIC-02 | Phase 1 | Pending |
+| VOIC-03 | Phase 1 | Pending |
+| VOIC-04 | Phase 1 | Pending |
+| VOIC-05 | Phase 1 | Pending |
+| VOIC-06 | Phase 1 | Pending |
+| VOIC-07 | Phase 2 | Pending |
+| VOIC-08 | Phase 1 | Pending |
+| VOIC-09 | Phase 6 | Pending |
+| VOIC-10 | Phase 3 | Pending |
+| SPCH-01 | Phase 1 | Pending |
+| SPCH-02 | Phase 1 | Pending |
+| SPCH-03 | Phase 1 | Pending |
+| SPCH-04 | Phase 1 | Pending |
+| SPCH-05 | Phase 3 | Pending |
+| SPCH-06 | Phase 3 | Pending |
+| SPCH-07 | Phase 6 | Pending |
+| AGNT-01 | Phase 2 | Pending |
+| AGNT-02 | Phase 2 | Pending |
+| AGNT-03 | Phase 2 | Pending |
+| AGNT-04 | Phase 2 | Pending |
+| AGNT-05 | Phase 2 | Pending |
+| AGNT-06 | Phase 3 | Pending |
+| AGNT-07 | Phase 3 | Pending |
+| AGNT-08 | Phase 3 | Pending |
+| AGNT-09 | Phase 2 | Pending |
+| PCTL-01 | Phase 5 | Pending |
+| PCTL-02 | Phase 5 | Pending |
+| PCTL-03 | Phase 5 | Pending |
+| PCTL-04 | Phase 5 | Pending |
+| PCTL-05 | Phase 5 | Pending |
+| PCTL-06 | Phase 5 | Pending |
+| PCTL-07 | Phase 5 | Pending |
+| PCTL-08 | Phase 5 | Pending |
+| HAND-01 | Phase 4 | Pending |
+| HAND-02 | Phase 4 | Pending |
+| HAND-03 | Phase 4 | Pending |
+| HAND-04 | Phase 4 | Pending |
+| HAND-05 | Phase 4 | Pending |
+| HAND-06 | Phase 3 | Pending |
+| HAND-07 | Phase 3 | Pending |
+| HAND-08 | Phase 4 | Pending |
+| HAND-09 | Phase 4 | Pending |
+| HUD-01 | Phase 6 | Pending |
+| HUD-02 | Phase 6 | Pending |
+| HUD-03 | Phase 1 | Pending |
+| HUD-04 | Phase 6 | Pending |
+| HUD-05 | Phase 3 | Pending |
+| HUD-06 | Phase 5 | Pending |
+| HUD-07 | Phase 2 | Pending |
+| HUD-08 | Phase 3 | Pending |
+| HUD-09 | Phase 6 | Pending |
+| HUD-10 | Phase 6 | Pending |
+| HUD-11 | Phase 6 | Pending |
+| HUD-12 | Phase 6 | Pending |
+| SAFE-01 | Phase 2 | Pending |
+| SAFE-02 | Phase 2 | Pending |
+| SAFE-03 | Phase 2 | Pending |
+| SAFE-04 | Phase 4 | Pending |
+| SAFE-05 | Phase 2 | Pending |
+| SAFE-06 | Phase 2 | Pending |
+| SAFE-07 | Phase 2 | Pending |
+| SAFE-08 | Phase 2 | Pending |
+| SAFE-09 | Phase 1 | Pending |
+| SAFE-10 | Phase 4 | Pending |
+| SAFE-11 | Phase 2 | Pending |
+| QUAL-01 | Phase 1 | Pending |
+| QUAL-02 | Phase 7 | Pending |
+| QUAL-03 | Phase 1 | Pending |
+| QUAL-04 | Phase 7 | Pending |
+| QUAL-05 | Phase 7 | Pending |
+| QUAL-06 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 77 total
-- Mapped to phases: 0
-- Unmapped: 77 (filled by roadmap)
+- v1 requirements: 79 total
+- Mapped to phases: 79
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-13*
-*Last updated: 2026-10-13 after initial definition*
+*Last updated: 2026-10-13 after roadmap creation (added CORE-06, CORE-07 for self-building safety)*

@@ -111,6 +111,9 @@ The user can do real, tangible work by voice alone: Snow understands the request
 | Nothing hardcoded in Snow's speech; LLM generates wording and emotion | User requires human, not robotic | — Pending |
 | ASCII-shader 3D HUD as visual identity | User's chosen aesthetic from reference video | — Pending |
 | Single-user v1, architected for later multi-user | "Me now, others later" | — Pending |
+| Python 3.12 core + TypeScript/React HUD in an Electron shell (not Tauri, not a TS daemon) | Voice ML, UI Automation and agent SDK hooks are Python-first; no Rust/MSVC on the machine; HUD is a WebSocket client so the shell stays swappable | — Pending |
+| LLM gateway = Experiential Labs (OpenAI-compatible); gpt-5.6-luna main, deepseek-v4-flash fast, qwen3.8-27b cheap vision | User's free credits; all three support tool calling | — Pending |
+| Vertical MVP roadmap ordered for dogfooding ("Snow builds Snow" from Phase 2) | User wants to use Snow to build Snow; stable running copy + approved self-upgrade keep it safe | — Pending |
 
 ## Evolution
 
