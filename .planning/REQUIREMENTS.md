@@ -12,10 +12,13 @@ Requirements for the first release. Each maps to one roadmap phase.
 - [ ] **CORE-01**: Snow starts automatically when the user logs in to Windows and keeps running in the background
 - [ ] **CORE-02**: Snow recovers on its own after a crash of any subsystem (voice, brain, HUD, agent runner) without the user restarting it
 - [ ] **CORE-03**: Every action Snow takes is recorded as a typed event (source, reason, risk tier, result) that all views (HUD, phone, history) read from
-- [ ] **CORE-04**: The LLM provider, base URL and model for each role (main, fast) are changed by configuration only, with no code change
+- [ ] **CORE-04**: The LLM provider, base URL and model for each role (brain, fast, vision) are changed by configuration only, with no code change
 - [ ] **CORE-05**: Snow remembers in-progress tasks across restarts and resumes or reports them after coming back
 - [ ] **CORE-06**: Snow runs from a pinned, versioned copy separate from any repository it works on, so coding tasks (including work on Snow itself) never edit the running copy
 - [ ] **CORE-07**: Snow switches its running copy to a newly accepted build only after the user approves, and rolls back automatically if the new build fails its health check
+- [ ] **CORE-08**: Each LLM role has an ordered fallback chain of provider and model entries in config; Snow moves to the next entry on 429, insufficient_quota, 5xx, timeout or connection error, and skips any provider with no stored key (shown as "not configured" in health)
+- [ ] **CORE-09**: Snow respects free-tier limits: per-provider request and token counters, cool-down after a 429 using the reset headers, and the provider is skipped while it cools down
+- [ ] **CORE-10**: Every LLM response records which provider and model served it; the HUD shows the active provider per role, and Snow says briefly when it has switched because of limits
 
 ### Voice Input
 
@@ -99,9 +102,10 @@ Requirements for the first release. Each maps to one roadmap phase.
 - [ ] **SAFE-06**: User can stop everything instantly by saying "Snow, stop", pressing a global hotkey, or clicking a HUD button; this works even when the LLM is stuck
 - [ ] **SAFE-07**: When a password or secret is needed, Snow pauses and the user enters it directly; Snow never asks for a spoken secret
 - [ ] **SAFE-08**: Content from screens, web pages, files and tool output is treated as data, not as instructions; an action that originates from such content needs approval
-- [ ] **SAFE-09**: Secrets are stored in Windows Credential Manager, never in code, config files or logs, and are redacted from all logs
+- [ ] **SAFE-09**: Secrets are stored in Windows Credential Manager, never in code, config files, `.env` files, logs, events or the HUD, and are redacted from all logs; a setup command prompts for each provider key and stores it
 - [ ] **SAFE-10**: Phone and PC talk only over an authenticated private network (Tailscale); a phone reply is accepted only from the user's authenticated account
 - [ ] **SAFE-11**: Snow keeps an append-only, redacted audit log of every action, separate from the display history
+- [ ] **SAFE-12**: Each LLM provider has a data-trust level in config; code, diffs, agent output, file contents and personal data are never sent to untrusted providers (Google AI Studio free tier, OpenRouter free models), and if no allowed provider remains the call fails clearly instead of sending
 
 ### Production Quality
 
@@ -180,6 +184,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CORE-05 | Phase 4 | Pending |
 | CORE-06 | Phase 2 | Pending |
 | CORE-07 | Phase 3 | Pending |
+| CORE-08 | Phase 1 | Pending |
+| CORE-09 | Phase 1 | Pending |
+| CORE-10 | Phase 1 | Pending |
 | VOIC-01 | Phase 1 | Pending |
 | VOIC-03 | Phase 1 | Pending |
 | VOIC-04 | Phase 1 | Pending |
@@ -245,6 +252,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SAFE-09 | Phase 1 | Pending |
 | SAFE-10 | Phase 4 | Pending |
 | SAFE-11 | Phase 2 | Pending |
+| SAFE-12 | Phase 1 | Pending |
 | QUAL-01 | Phase 1 | Pending |
 | QUAL-02 | Phase 7 | Pending |
 | QUAL-03 | Phase 1 | Pending |
@@ -253,10 +261,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUAL-06 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 78 total (VOIC-02 removed 2026-10-14)
-- Mapped to phases: 78
+- v1 requirements: 82 total (VOIC-02 removed; CORE-08..10 and SAFE-12 added 2026-10-14)
+- Mapped to phases: 82
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-13*
-*Last updated: 2026-10-14 after Phase 1 context (removed VOIC-02 push-to-talk)*
+*Last updated: 2026-10-14 after Phase 1 context (removed VOIC-02 push-to-talk; added LLM fallback chains CORE-08..10 and privacy routing SAFE-12)*

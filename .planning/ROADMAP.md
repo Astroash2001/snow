@@ -26,11 +26,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal:** As a developer, I want to wake Snow by voice and talk with it naturally, so that I can speak to my PC instead of typing.
 **Mode:** mvp
 **Depends on:** Nothing (first phase)
-**Requirements:** CORE-01, CORE-02, CORE-03, CORE-04, VOIC-01, VOIC-03, VOIC-04, VOIC-05, VOIC-06, VOIC-08, SPCH-01, SPCH-02, SPCH-03, SPCH-04, HUD-03, QUAL-01, QUAL-03, SAFE-09
+**Requirements:** CORE-01, CORE-02, CORE-03, CORE-04, CORE-08, CORE-09, CORE-10, VOIC-01, VOIC-03, VOIC-04, VOIC-05, VOIC-06, VOIC-08, SPCH-01, SPCH-02, SPCH-03, SPCH-04, HUD-03, QUAL-01, QUAL-03, SAFE-09, SAFE-12
 **Success Criteria** (what must be TRUE):
   1. After the user logs in to Windows, Snow is already running; saying "Hey Snow" opens a turn (no key needed; Snow stays in the conversation until dismissed or silent) and the HUD shows "listening" within 100 ms, and no idle audio ever leaves the PC
   2. User speaks naturally, pausing mid-thought without being cut off, watches the live transcript on the HUD, and hears an LLM-written, emotion-voiced reply start within about 1 second; speaking over Snow stops it mid-sentence and cancels the rest of the reply
-  3. When Cartesia is unreachable or out of credits, Snow keeps talking in a local voice; changing the LLM provider, base URL or model for the main and fast roles is a configuration edit with no code change; API keys live in Windows Credential Manager and never appear in config files or logs
+  3. When Cartesia is unreachable or out of credits, Snow keeps talking in a local voice; changing the LLM provider, base URL, model or fallback order for the brain, fast and vision roles is a configuration edit with no code change; when a provider hits a limit or fails, Snow moves to the next one in the chain, says so briefly, and the HUD shows the active provider; personal data and code never go to providers marked untrusted; API keys live only in Windows Credential Manager and never appear in config files or logs
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log
   5. Every change to Snow's repository runs typed, linted, tested CI, and a failing change cannot be merged
 **Plans:** TBD
@@ -39,7 +39,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Notes:
 - Event bus and durable event log come first; every later view (HUD, phone, history, audit) reads from it.
 - Architecture (decided 2026-10-13): Python 3.12 core (voice, brain, policy, agent runner) and a TypeScript/React HUD in an Electron shell over a loopback WebSocket. The HUD in this phase is a light state, transcript and health view; the ASCII orb arrives in Phase 6.
-- Early dependency, not a blocker: a short spike at the start confirms the LLM gateway's base URL, streaming, tool calling and vision support. Tool calling is needed by Phase 2 and vision by Phase 5; the LLM layer stays swappable by configuration whatever the answer.
+- Early dependency, not a blocker: a short spike at the start calls `GET /models` on every configured provider (Experiential Labs, Groq, Google AI Studio, NVIDIA NIM, OpenRouter) to confirm exact model IDs, streaming, tool calling and vision support, and measures Groq `openai/gpt-oss-120b` against `deepseek-v4-flash` to pick the fast-role primary. Tool calling is needed by Phase 2 and vision by Phase 5. Missing keys skip that provider and never block the phase.
 - English only and headphones assumed for v1, so barge-in does not need speaker-mode echo cancellation (deferred to v2).
 - Research flag: wake-word training on Python 3.12, speech-to-text latency and VRAM on the RTX 4050 (6 GB), Cartesia timestamps and credit metering.
 
@@ -119,7 +119,7 @@ Notes:
 
 Notes:
 - Screen and web content is data, not instructions: the Phase 2 rule that any action originating from such content needs approval applies to every step here.
-- Research flag: UIPI and elevated windows, DPI and focus behaviour, choice of vision model (gateway vision support is still unconfirmed), and injection defence for screen reading.
+- Research flag: UIPI and elevated windows, DPI and focus behaviour, the vision fallback chain decided 2026-10-14 (luna, Gemini Flash, qwen3.8-27b; support confirmed in the Phase 1 spike), and injection defence for screen reading.
 - WhatsApp Desktop is the requirement's own example, but research flags account-ban risk for WhatsApp automation; confirm the target app during phase discussion.
 
 ### Phase 6: Glass-box HUD & Jarvis Body
@@ -150,7 +150,7 @@ Notes:
   1. User installs a versioned Snow release from an installer on a clean Windows account, and Snow starts at login with voice, brain, agents and HUD working
   2. New releases arrive through auto-update and apply only after the user approves; a release that fails its health check rolls back to the previous version
   3. When anything fails, Snow says plainly what went wrong, by voice and on the HUD, and the exact cause is recorded in the logs
-  4. Personal data (audio, transcripts, history, memory, secrets) stays on the PC; an egress check shows that only the text each feature needs leaves the machine (LLM gateway, Cartesia, minimal Telegram messages)
+  4. Personal data (audio, transcripts, history, memory, secrets) stays on the PC; an egress check shows that only the text each feature needs leaves the machine (LLM providers within their privacy-routing limits, Cartesia, minimal Telegram messages)
 **Plans:** TBD
 
 Notes:

@@ -10,7 +10,7 @@ Snow is an always-on, Jarvis-style personal AI that runs on the user's Windows l
 
 ### Constraints
 
-- **Budget:** free for now — runs on gateway credits; the user plans to pay for an API later — so the LLM layer must be swappable by configuration, not code
+- **Budget:** free for now — runs on free provider tiers and gateway credits; the user plans to pay for an API later — so the LLM layer must be swappable by configuration, not code
 - **Provider independence:** no hard dependency on Claude, the Claude app, or any single account/provider — agent and model access come and go
 - **Hardware:** 6 GB VRAM — local models limited to small ones (wake word, speech-to-text, speaker verification); large LLMs stay remote
 - **Platform:** Windows 11 primary host; Android for mobile
@@ -32,7 +32,7 @@ Snow is an always-on, Jarvis-style personal AI that runs on the user's Windows l
 **User decisions on 2026-10-13 override the research text below wherever they conflict:**
 
 - **Shell:** Electron is the v1 HUD shell, not Tauri. The Python 3.12 core and the TS/React HUD talk over a loopback WebSocket. Ignore the Tauri, Rust and MSVC install steps below unless the user later reopens this decision.
-- **LLM gateway:** Experiential Labs, base URL `https://api.experientiallabs.ai/v1`, `Authorization: Bearer` key kept in local `.env` / Credential Manager, never committed. Roles: `gpt-5.6-luna` main brain and vision (do not send `temperature`), `deepseek-v4-flash` fast, `qwen3.8-27b` cheap vision.
+- **LLM layer (updated 2026-10-14):** per-role fallback chains across five OpenAI-compatible providers, all called with the plain `openai` SDK and `base_url` (never litellm): Experiential Labs `https://api.experientiallabs.ai/v1`, Groq `https://api.groq.com/openai/v1`, Google AI Studio `https://generativelanguage.googleapis.com/v1beta/openai/`, NVIDIA NIM `https://integrate.api.nvidia.com/v1`, OpenRouter `https://openrouter.ai/api/v1` (free models only). Roles: **brain** = luna, then Gemini Flash, then NIM DeepSeek V4 Pro / Kimi K3, then OpenRouter Nemotron 3 Super free; **fast** = Groq `openai/gpt-oss-120b`, then Groq Qwen3.8 27B, then `deepseek-v4-flash`, then an OpenRouter free model (primary confirmed by a Phase 1 latency test); **vision** = luna, then Gemini Flash, then `qwen3.8-27b`. Keys only in Windows Credential Manager (no `.env`). Code and personal data never go to Google AI Studio free or OpenRouter free. Per-model quirks in config (`gpt-5.6-luna` rejects `temperature`). Full decision: `.planning/phases/01-always-on-voice-loop/01-CONTEXT.md` D-20 to D-30.
 - **Dogfooding:** from Phase 2, Snow drives Claude Code to build Snow. Snow runs from a pinned copy and never edits its running copy (CORE-06). Self-upgrade happens only on user approval, with rollback (CORE-07).
 
 ## Recommended Stack
@@ -77,7 +77,7 @@ Snow is an always-on, Jarvis-style personal AI that runs on the user's Windows l
 | Technology | Version | Purpose | Why Recommended | Confidence |
 |------------|---------|---------|-----------------|------------|
 | openai (Python SDK) | 3.29.0 (reg) | OpenAI-compatible client for the gateway | Swappable by config: `base_url`, `model`, `api_key_ref` per role. Pipecat's `OpenAILLMService` accepts a custom base URL and handles streaming + function calls. Confirm gateway supports streaming tool calls, `tool_choice`, and image inputs (vision) before building on it. | HIGH |
-| Model roles in config (`models.toml`) | n/a | brain (GPT-5.6 Luna), fast (DeepSeek V4 Flash), local-ish/other (Qwen3.8 27B), vision (TBD) | Never hard-code a model in code. Route: fast model for conversational turn + intent routing, brain model for planning/tool-heavy work, a vision-capable model for screen grounding. Treat vision support of every gateway model as unknown until tested. | MEDIUM |
+| Model roles in config (`models.toml`) | n/a | brain, fast, vision, each an ordered provider/model fallback chain (see Headline Decisions) | Never hard-code a model in code. Route: fast model for conversational turn + intent routing, brain model for planning/tool-heavy work, a vision-capable model for screen grounding. Treat vision support of every gateway model as unknown until tested. | MEDIUM |
 | pydantic / pydantic-settings | 2.14.1 / 2.15.0 (reg) | Typed config, tool schemas, event contracts | Single source of truth for tool JSON-schemas and HUD event types. | HIGH |
 | mcp (official Python SDK) | 2.3.0 (reg) | MCP client (tools) and Snow's own MCP server | v2 is stable and is what Pipecat's `mcp` extra pins (`>=2.1.1,<3`). Breaking v1->v2 changes: `FastMCP` renamed `MCPServer`, `McpError`->`MCPError`, `streamablehttp_client`->`streamable_http_client`, snake_case fields. Targets the 2026-07-28 stateless spec revision and still serves older clients. | HIGH |
 | fastmcp | 4.1.0 (reg) | Ergonomic way to write Snow's own MCP tool servers | Built on SDK v2. Optional; use only if writing several custom servers. | MEDIUM |

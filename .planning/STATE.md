@@ -72,7 +72,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 1]: LLM gateway resolved 2026-10-13 from public docs: Experiential Labs, base URL https://api.experientiallabs.ai/v1, Bearer xpl_ key, OpenAI Chat Completions/Responses + SSE streaming; gpt-5.6-luna (tools, image+pdf vision, rejects temperature), deepseek-v4-flash (tools, text only), qwen3.8-27b (tools, image+video). Still to verify with the user's key in Phase 1 (key lives in local .env, never committed)
+- [Phase 1]: LLM layer decided 2026-10-14: per-role fallback chains (brain, fast, vision) across Experiential Labs, Groq, Google AI Studio, NVIDIA NIM and OpenRouter free models; privacy routing keeps code and personal data off Google AI Studio free and OpenRouter free; keys only in Windows Credential Manager (no .env). Exact model IDs, streaming, tool calling and vision to confirm via GET /models in the Phase 1 spike; Groq vs deepseek-v4-flash latency test picks the fast primary. See 01-CONTEXT.md D-20 to D-30
 - [Phase 2/3]: Two dogfooding mechanics have no REQ-ID yet (stable running copy separate from the dev copy; self-upgrade only on approval with rollback); confirm and add before planning Phase 2
 - [Phase 2]: Claude Code account is borrowed; confirm Agent SDK headless permission behaviour and account terms
 - [Phase 5]: WhatsApp Desktop automation carries account-ban risk; confirm the target app before planning

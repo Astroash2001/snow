@@ -81,13 +81,13 @@ The user can do real, tangible work by voice alone: Snow understands the request
 - **Visual direction:** an "ASCII MMORPG" reference video — a real 3D scene passed through an ASCII shader, glyph color preserved, glowing light sources, letters revealed on zoom. Idea: Snow's body is built from glyphs of the user's own code. Reference families: film UI (Jayse Hansen, Territory Studio), game UI (gameuidatabase.com).
 - **Agent landscape:** the user rotates between Claude Code (borrowed account), Antigravity and open-source models because paid access is not guaranteed — Snow must never depend on one provider.
 - **Hardware:** Windows 11 laptop — Intel i5-12500H (12 cores), 16 GB RAM, NVIDIA RTX 4050 Laptop (6 GB VRAM); Node 25, Python 3.10, Git installed. Android phone.
-- **Model access:** free credits on a model gateway — GPT-5.6 Luna (main brain), DeepSeek V4 Flash (fast/cheap), Qwen3.8 27B. Gateway base URL, OpenAI-compatibility and tool-calling support still to confirm.
+- **Model access:** free tiers only, across five OpenAI-compatible providers: Experiential Labs (credits shared with the user's other projects), Groq, Google AI Studio, NVIDIA NIM and OpenRouter free models. Each Snow role (brain, fast, vision) has an ordered fallback chain in config (see Phase 1 context D-20 to D-30). These LLMs are only Snow's own brain; coding work runs on the user's Claude Code and Antigravity subscriptions.
 - **Draft scenarios (intent, not scripts):** morning brief; voice coding with questions back; agent permission requests; WhatsApp send with read-back; incoming message at a natural pause; meeting reminder; frustration detected; late-night care; job hunt; phone remote check on a build; focus mode; learning from dismissals; PC/media control without confirmation; ignoring commands from voices that are not the user's.
 - **Proactivity model (for later milestones):** senses → world model → memory → judgment/interrupt policy (urgency × relevance × interruptibility) → feedback; emotion read from voice tone, words and behavior.
 
 ## Constraints
 
-- **Budget:** free for now — runs on gateway credits; the user plans to pay for an API later — so the LLM layer must be swappable by configuration, not code
+- **Budget:** free for now — runs on free provider tiers and gateway credits; the user plans to pay for an API later — so the LLM layer must be swappable by configuration, not code
 - **Provider independence:** no hard dependency on Claude, the Claude app, or any single account/provider — agent and model access come and go
 - **Hardware:** 6 GB VRAM — local models limited to small ones (wake word, speech-to-text, speaker verification); large LLMs stay remote
 - **Platform:** Windows 11 primary host; Android for mobile
@@ -112,7 +112,7 @@ The user can do real, tangible work by voice alone: Snow understands the request
 | ASCII-shader 3D HUD as visual identity | User's chosen aesthetic from reference video | — Pending |
 | Single-user v1, architected for later multi-user | "Me now, others later" | — Pending |
 | Python 3.12 core + TypeScript/React HUD in an Electron shell (not Tauri, not a TS daemon) | Voice ML, UI Automation and agent SDK hooks are Python-first; no Rust/MSVC on the machine; HUD is a WebSocket client so the shell stays swappable | — Pending |
-| LLM gateway = Experiential Labs (OpenAI-compatible); gpt-5.6-luna main, deepseek-v4-flash fast, qwen3.8-27b cheap vision | User's free credits; all three support tool calling | — Pending |
+| LLM layer = per-role fallback chains across Experiential Labs, Groq, Google AI Studio, NVIDIA NIM and OpenRouter (all OpenAI-compatible, plain `openai` SDK, no litellm); privacy routing keeps code and personal data off Google AI Studio free and OpenRouter free (decided 2026-10-14, replaces the Experiential-Labs-only decision) | Experiential credits are shared with other projects, so free fallbacks must carry real traffic; provider independence | — Pending |
 | Vertical MVP roadmap ordered for dogfooding ("Snow builds Snow" from Phase 2) | User wants to use Snow to build Snow; stable running copy + approved self-upgrade keep it safe | — Pending |
 
 ## Evolution

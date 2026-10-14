@@ -52,11 +52,35 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
 - **D-18:** The event log stores text transcripts (what the user said, what Snow replied) plus event metadata. Raw audio is never written to disk by the conversation pipeline. — **Reversibility:** reversible going forward — audio not saved is gone, but the setting can change for future turns.
 - **D-19:** Transcripts are kept 30 days, then deleted automatically. The retention period is configurable.
 
+### LLM layer (added 2026-10-14 from the user's advisor session; locked)
+- **D-20:** Scope of Snow's own LLMs. Coding work is done by the user's Claude Code and Antigravity subscriptions, driven through the shell. The LLMs below are only Snow's own brain: conversation, turning speech into clean instructions for the agents, summarizing results, answering general questions, and later screen reading. Free options only. Experiential Labs credits are shared with the user's other projects, so fallbacks carry real traffic.
+- **D-21:** Three roles, each with an ordered fallback chain (CORE-04, CORE-08). Snow tries entries in order and moves to the next on 429, `insufficient_quota`, 5xx, timeout or connection error.
+  - **brain** (understanding, planning, summaries, general Q&A): 1) Experiential Labs `gpt-5.6-luna`; 2) Google AI Studio, newest Gemini Flash; 3) NVIDIA NIM, DeepSeek V4 Pro, then Kimi K3; 4) OpenRouter, Nemotron 3 Super 120B `:free`.
+  - **fast** (spoken replies, intent detection, transcript cleanup): 1) Groq `openai/gpt-oss-120b`; 2) Groq Qwen3.8 27B; 3) Experiential Labs `deepseek-v4-flash`; 4) OpenRouter, any `:free` model with tool calling.
+  - **vision** (Phase 5 screen reading; configured now, used in Phase 5): 1) Experiential Labs `gpt-5.6-luna`; 2) Google AI Studio Gemini Flash; 3) Experiential Labs `qwen3.8-27b`.
+  - Exact model IDs other than those already given come from each provider's `GET /models` during the Phase 1 gateway spike. Do not guess IDs.
+  — **Reversibility:** reversible — chains, order and models are config.
+- **D-22:** Providers, all OpenAI-compatible. Use the plain `openai` SDK with `base_url`. Never use `litellm`.
+  - Experiential Labs: `https://api.experientiallabs.ai/v1` (key `xpl_...`)
+  - Groq: `https://api.groq.com/openai/v1` (key `gsk_...`)
+  - Google AI Studio: `https://generativelanguage.googleapis.com/v1beta/openai/`
+  - NVIDIA NIM: `https://integrate.api.nvidia.com/v1` (key `nvapi-...`)
+  - OpenRouter: `https://openrouter.ai/api/v1` (key `sk-or-...`; free models only; the key's credit limit is 0)
+- **D-23:** Chains, providers, model IDs and per-model quirks live in config, not code. Adding or reordering a provider is a config edit. Quirks are per model in config (for example, `gpt-5.6-luna` rejects the `temperature` parameter).
+- **D-24:** Keys live only in Windows Credential Manager (keyring), never in a `.env` file. A setup command prompts for each provider key and stores it (SAFE-09). Keys never appear in config, logs, events or the HUD. The user never pastes keys in chat.
+- **D-25:** Missing keys must not block Phase 1. A provider with no stored key is skipped in every chain and shown as "not configured" in subsystem health.
+- **D-26:** Privacy routing (SAFE-12). Google AI Studio free tier and OpenRouter free models may log or train on data. They may receive only general questions and non-sensitive screenshots. Code, diffs, agent output, file contents and anything personal never go to them. If the only remaining providers in a chain are not allowed for that data, the call fails clearly instead of sending.
+- **D-27:** Free-tier limits (CORE-09). Per-provider request and token counters; cool-down after a 429 using the reset headers; skip a provider while it cools down. Groq caps about 200K tokens/day per model, so summary inputs stay compact: built from recorded events, never full diffs or logs.
+- **D-28:** Every LLM response records which provider and model served it (CORE-10). The HUD shows the active provider per role. Snow tells the user briefly, in character, when it has switched because of limits (same pattern as the voice switch in D-17).
+- **D-29:** Phase 1 gateway spike: call `GET /models` on each provider with a stored key to confirm exact model IDs, streaming and tool calling (and image input for vision models). Record what each model supports in config or a spike note.
+- **D-30:** Phase 1 latency test: compare Groq `openai/gpt-oss-120b` with Experiential Labs `deepseek-v4-flash` for time to first token and time to first audio. Pick the fast-role primary from the measured numbers.
+
 ### Claude's Discretion
 - How "mute", "go to sleep" and "that's all" are recognized. Recommended: deterministic local phrase matching on the transcript, not an LLM call, so they work instantly and when the gateway is down.
 - How the wake-alone acknowledgement stays LLM-written without adding latency (for example, a small pool of LLM-generated acknowledgements refreshed in the background). It must not be a hardcoded phrase (SPCH-01).
 - Exact silence timeout inside the 30-60 second range, the orb's colors and motion, the dashboard layout and the mini indicator size.
 - How the HUD gets credit balance and voice status from the core.
+- How the fallback chain plugs into the voice pipeline (Pipecat's `OpenAILLMService` takes one `base_url`, so a chain needs a thin wrapper or a custom service), and how request data is tagged for privacy routing (D-26).
 - Where enrollment or wake-word training recordings live, if any are needed. These are separate from the conversation log, created only by an explicit user action, and stored locally.
 
 </decisions>
@@ -67,13 +91,13 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
 **Downstream agents MUST read these before planning or implementing.**
 
 ### Project scope and requirements
-- `.planning/PROJECT.md` — vision, constraints, Key Decisions table (Electron shell, Experiential Labs gateway, dogfooding order)
+- `.planning/PROJECT.md` — vision, constraints, Key Decisions table (Electron shell, multi-provider LLM fallback chains, dogfooding order)
 - `.planning/REQUIREMENTS.md` — CORE-01..04, VOIC-01..06, VOIC-08, SPCH-01..04, HUD-03, QUAL-01, QUAL-03, SAFE-09 (note D-07: VOIC-02 removed from Phase 1)
 - `.planning/ROADMAP.md` § "Phase 1: Always-On Voice Loop" — goal, success criteria, notes (criterion 1 must drop the push-to-talk wording per D-07)
 - `.planning/STATE.md` — gateway details and open concerns (Cartesia free tier about 25 min/month)
 
 ### Stack and architecture research
-- `.claude/CLAUDE.md` — technology stack with versions; user decisions of 2026-10-13 override research text (Electron, not Tauri; gateway roles; luna rejects `temperature`)
+- `.claude/CLAUDE.md` — technology stack with versions; user decisions of 2026-10-13 and 2026-10-14 override research text (Electron, not Tauri; LLM roles and fallback chains; luna rejects `temperature`)
 - `.planning/research/STACK.md` — library choices and versions (Pipecat, openWakeWord, faster-whisper, Cartesia, kokoro-onnx, keyring, structlog)
 - `.planning/research/ARCHITECTURE.md` — ports and adapters, durable event log, snapshot-plus-delta, supervisor, loopback WebSocket with token
 - `.planning/research/PITFALLS.md` — known failure modes (wake-word training, CUDA/cuDNN DLLs, latency, barge-in)
@@ -82,6 +106,10 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
 
 ### External
 - Experiential Labs gateway docs: https://platform.experientiallabs.ai/docs and https://platform.experientiallabs.ai/llms.txt — base URL `https://api.experientiallabs.ai/v1`, model catalog at `https://api.experientiallabs.ai/api/models`
+- Groq OpenAI compatibility and rate limits: https://console.groq.com/docs/openai and https://console.groq.com/docs/rate-limits
+- Google AI Studio OpenAI compatibility: https://ai.google.dev/gemini-api/docs/openai
+- NVIDIA NIM API catalog: https://build.nvidia.com
+- OpenRouter API and free-model limits: https://openrouter.ai/docs
 
 </canonical_refs>
 
