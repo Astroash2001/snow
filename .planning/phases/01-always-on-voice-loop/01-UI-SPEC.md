@@ -1,7 +1,7 @@
 ---
 phase: "1"
 slug: "always-on-voice-loop"
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: "2026-10-14"
@@ -156,6 +156,7 @@ Native Windows frame, `backgroundColor: '#0B0E14'` (no white flash), `nativeThem
 
 - Left rail: Presence card on top, Voice card below. Right column: Transcript card fills remaining height (min 240px), Health card sits at the bottom at natural height.
 - Below 880px window width the Health card stacks to one column (Subsystems above Language models). Minimum window 800x560.
+- Primary visual anchor: the Presence orb and its state word. The eye lands there first; the transcript is secondary, and the Voice and Health cards are tertiary.
 - A full-width banner row appears above both columns for the two global conditions only: hard mute (red) and core connection lost (red). It pushes content down; it never overlays.
 
 ### Mini indicator window [D-11, D-13]
@@ -297,27 +298,44 @@ Note: `snow setup` is the SAFE-09 key-entry command named in REQUIREMENTS; if th
 
 ## UI Considerations
 
-> Shape-rooted UI state coverage. Empty-state and error-state copy lives in the Copywriting Contract above; rows here reference it rather than restating it.
+> Shape-rooted UI state coverage, computed by the UI-consideration probe after checker approval (8 elements, 35 applicable checks) and confirmed by the user on 2026-10-14. Empty-state and error-state copy lives in the Copywriting Contract above; rows here reference it rather than restating it.
 
-Applicable state considerations resolved: 12 covered, 2 backstop, 1 unresolved
+Applicable state considerations resolved: 26 covered, 2 backstop, 3 dismissed, 1 unresolved
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
 | empty | list-collection (Transcript) | ✅ covered | With no conversation, the transcript card renders the standing-by, asleep or muted empty state from the Copywriting Contract, chosen by current presence state |
 | loading | list-collection (Health card, Voice card, Transcript) | ✅ covered | Before the first snapshot arrives the orb shows the offline style, health rows show "Checking" text in `--snow-text-3` in their reserved 32px slots, and no layout shift occurs when the snapshot lands |
 | loading | media (Orb) | ✅ covered | From end of user turn to first reply audio the orb shows `thinking` immediately; the Snow transcript row appears only when the first reply delta arrives (no spinner, no placeholder bubble) |
-| error | nav (Connection to core) | ✅ covered | Loss of the WebSocket shows the connection-lost banner, offline orb, disabled Mute button, and auto-reconnect with backoff 0.5 s to 8 s; restore triggers a fresh snapshot |
-| error | list-collection (Subsystem rows) | ✅ covered | A Down or Restarting subsystem shows its chip plus helper line, an alert dot on the mini orb, and a tray tooltip suffix "(attention)" |
+| loading | interactive-control (Mute button) | ✅ covered | On click the button shows a 120 ms pressed state; the label flips only when the core's `mute.changed` event arrives (confirmed state, never optimistic) |
+| loading | nav (Mini indicator) | ✅ covered | Until the first snapshot arrives the mini orb renders the offline style; no caption is shown |
+| error | nav (Connection to core, connection banner) | ✅ covered | Loss of the WebSocket shows the connection-lost banner, offline orb (dashboard and mini), disabled Mute button, and auto-reconnect with backoff 0.5 s to 8 s; restore triggers a fresh snapshot and the "Reconnected" status announcement |
+| error | interactive-control (Mute button) | ✅ covered | While the core is unreachable the button is disabled and the connection-lost banner explains why |
+| error | media (Orb) | ✅ covered | Core socket lost puts the orb in the `offline` state ("Reconnecting") |
+| error | list-collection (Subsystem rows) | ✅ covered | A Down or Restarting subsystem shows its chip plus helper line, an 8px alert dot on the mini orb, and a tray tooltip suffix "(attention)" |
 | error | interactive-control (Reply path) | ✅ covered | Exhausted chains and privacy blocks render as transcript system rows using the documented copy; never a modal |
 | error | media (Voice card) | ✅ covered | Cartesia out of credits or unreachable switches the Voice card to Local voice with the documented helper line |
-| error | static-content (Credits value) | ⚠ unresolved | Whether Cartesia exposes a remaining-credit balance via API (and in what unit) is unconfirmed (research flag "Cartesia timestamps and credit metering"). Planner assumes "Unavailable" is shown until the spike confirms a source |
+| empty | static-content (Credits value) | ⚠ unresolved — planner must treat as assumption | Whether Cartesia exposes a remaining-credit balance via API (and in what unit) is unconfirmed (research flag "Cartesia timestamps and credit metering"). Planner assumes "Unavailable" with helper "Cartesia did not report a balance." until the spike confirms a source |
 | populated | list-collection (Transcript) | 🧪 backstop | Visual-regression test with a fixed 12-turn fixture (user, Snow, interrupted, system rows); lifts as `{ statement, verification: backstop }` |
+| populated | list-collection (Health card) | ✅ covered | Subsystem rows and three collapsed role rows render from the snapshot with status chips; expanding a role lists its ordered chain with per-entry chips |
+| populated | media (Voice card) | ✅ covered | Row 1 shows active voice with a Primary or Fallback chip; row 2 shows credits in mono, tabular, thousands separators, warn color under 10% |
 | partial | list-collection (Live user row) | ✅ covered | Partial text replaces wholesale on each STT partial, rendered in `--snow-text-2` with caret; finalizes to `--snow-text`; removed if the turn has no speech |
+| partial | list-collection (Health card) | ✅ covered | Entries whose status is not yet known render the "Checking" chip in place; arriving deltas update in place with a 120 ms cross-fade, no reordering, no layout shift |
+| partial | media (Voice card) | ➖ dismissed | Voice status arrives as one atomic `voice.status` event; there is no partially loaded voice state |
 | overflow | list-collection (Transcript) | ✅ covered | Scroll container with auto-follow within 24px of bottom; scrolling up pauses follow and shows "Jump to latest" |
+| overflow | list-collection (Health card) | ✅ covered | Card grows to natural height; below 880px window width the two columns stack; role chains are collapsed by default so the card stays short |
 | overflow | nav (Mini window position) | 🧪 backstop | Saved position is clamped into a visible display work area on startup and after display changes; held-out manual/automated test on a removed secondary monitor and a mixed-DPI setup |
+| overflow | static-content (Mini caption) | ✅ covered | Max pill width 256px; overflow shows the tail with a 24px left mask fade; the window never resizes |
+| overflow | media (Voice card voice name) | ✅ covered | Voice name is a single line with end ellipsis; the full name is in `title` |
 | zero-one-many | list-collection (Providers and subsystems) | ✅ covered | Rows render from the snapshot at any count; "{n} of 5 providers not configured" summary hides at zero and uses the same wording at one; zero subsystems shows "No health data yet" |
+| zero-one-many | list-collection (Transcript) | ✅ covered | Zero turns shows the empty state; one or many turns use the same row layout |
+| zero-one-many | media (Voice card) | ➖ dismissed | Exactly one voice is active at any time |
 | long-text | static-content (Mini caption) | ✅ covered | Single line, tail-visible with left mask fade, fixed 256px max width, never wraps or resizes the window |
 | long-text | static-content (Transcript message, model IDs) | ✅ covered | Message text uses `overflow-wrap: anywhere`; model IDs are mono, end-ellipsis, full value in `title` and selectable |
+| long-text | media (Voice card voice name) | ✅ covered | Same as the overflow row: single line, end ellipsis, full name in `title` |
+| long-text | media (Orb), interactive-control (Mute button) | ➖ dismissed | Neither carries free text: the orb shows only the fixed state word, and the Mute button has two fixed labels that fit its width |
+| long-text | nav (Mini indicator) | ✅ covered | The only text in the mini window is the caption pill (covered above) and the fixed "Muted" pill |
+| empty | static-content (Voice card) | ✅ covered | Before the first `voice.status` the card shows "Checking"; a null balance shows "Unavailable" (see the unresolved credits row) |
 
 <!-- Rows replaced (not appended) on a probe re-run. -->
 
@@ -336,12 +354,12 @@ npm packages added for the HUD (`lucide-react`, `@fontsource-variable/inter`, `@
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
 **Approval:** pending
