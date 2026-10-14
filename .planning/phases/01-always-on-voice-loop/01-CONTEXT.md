@@ -8,7 +8,7 @@
 
 The user wakes Snow by saying "Hey Snow", talks naturally, and hears a fast, LLM-written, emotion-voiced reply in a Jarvis-like voice, with a local fallback voice when Cartesia is unavailable. Underneath: the event bus and durable event log, a supervisor that restarts crashed subsystems, autostart at Windows logon, secrets in Windows Credential Manager, config-swappable LLM roles, and typed/linted/tested CI.
 
-The HUD in this phase is light: a full dashboard window (presence orb, live transcript, subsystem health, mute state) and a minimized mini indicator. No coding agents, no PC control, no ASCII orb (Phase 6), no speaker verification (Phase 2).
+The HUD in this phase is light: a full dashboard window (presence orb, live transcript, subsystem health, mute state) and a minimized mini indicator. No coding agents, no PC control, no speaker verification (Phase 2). The ASCII orb ships in Phase 1 as a 2D glyph renderer (D-12, D-31); Phase 6 upgrades it to the full 3D shader version.
 
 Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, QUAL-01, QUAL-03, SAFE-09. VOIC-02 is removed from this phase by user decision (see D-07).
 
@@ -41,7 +41,8 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
   - **App open:** the full dashboard window.
   - **App minimized:** the full dashboard stops rendering (no background GPU/CPU cost), and a small always-on-top mini indicator shows that Snow is present and active.
   — **Reversibility:** costly — Phase 6 builds the ASCII orb, the full dashboard and the corner widget on top of this two-form window model, so changing it later touches both windows and the Electron shell.
-- **D-12:** Presence element in Phase 1 is a simple voice-reactive orb: a basic glowing circle that moves with the user's voice and with Snow's voice, colored by state (sleeping, listening, thinking, speaking, muted). The same element appears in the full and mini forms. The ASCII orb replaces it in Phase 6. The orb needs audio-level events on the bus for both mic input and TTS output.
+- **D-12 (revised 2026-10-14):** The presence element is the ASCII network orb from day one, never a plain glowing circle. The user rejected the plain-circle version after seeing generated mockups: "I want the ASCII interpretation of the orb everywhere." In Phase 1 it is a 2D glyph orb: a sphere of nodes and connecting lines drawn from ASCII characters, digits and code fragments, each glyph keeping its own color, cyan to violet, glow on the orb only. It moves with the user's voice and with Snow's voice and is colored by state (sleeping, listening, thinking, speaking, muted). The same component appears in the full and mini forms. The orb needs audio-level events on the bus for both mic input and TTS output. Visual target: `.planning/phases/01-always-on-voice-loop/refs/snow-vision-ascii-orb-dashboard.png` (the orb, not the page around it). — **Reversibility:** reversible — Phase 6 swaps the renderer behind the same `Presence` props.
+- **D-31:** The ASCII orb is Snow's only visual identity. A tiny rendering of the orb is also the app icon, the tray icon and Snow's avatar in the transcript. No snowflake or other logo. The rest of the interface stays clean (dark panels, modern sans-serif text, as in the reference image); only the orb is ASCII. Phase 6 upgrades the orb to the full 3D shader version (letters revealed on zoom, bloom, glyph atlas from the user's code) without changing where it appears.
 - **D-13:** Mini indicator: top-right corner by default, draggable, position remembered, click-through so it never blocks clicks on the windows below, and clicking it opens the full dashboard. It shows only the orb while idle. While in conversation, a one-line caption of what Snow heard appears next to it, then fades.
 - **D-14:** The full dashboard shows the transcript chat-style for the current conversation: the user's words updating live as they speak (VOIC-08), Snow's replies, newest at the bottom. The view clears when the conversation ends. Full history stays in the event log (the history view is Phase 6).
 - **D-15:** The full dashboard also shows subsystem health (each subsystem up or down, QUAL-03), the mute or sleep state, and which voice is active (Cartesia or local) with remaining Cartesia credits.
@@ -132,7 +133,11 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
 
 - Reference character: J.A.R.V.I.S. in the MCU, in particular how he responds when Tony calls him: no button, no chime, he simply answers or acts, says "sir", is calm under pressure and dryly sarcastic.
 - The user may share YouTube clips of Jarvis. Claude cannot watch video, so treat them as listening references for the Cartesia voice audition (D-05), not as research input.
-- The Phase 1 orb is a placeholder, but it must already move with both voices, because that is the core of the look the user wants (see Deferred, Phase 6).
+- Generated mockups (ChatGPT, 2026-10-14) in `.planning/phases/01-always-on-voice-loop/refs/`:
+  - `snow-vision-ascii-orb-dashboard.png`: approved orb look. Ignore its sidebar, search bar with Ctrl+Space hotkey, typed input box and message actions; those are not in scope.
+  - `snow-vision-mini-orb-desktop.png`: approved mini widget (orb plus caption pill, top-right).
+  - `snow-phase1-plain-orb-rejected.png`: layout and cards match the plan, but the plain glowing circle was rejected. Provider labels in it are wrong ("OpenAI").
+- The orb must move with both voices from Phase 1, because that is the core of the look the user wants (see Deferred, Phase 6).
 
 </specifics>
 

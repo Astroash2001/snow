@@ -38,7 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Notes:
 - Event bus and durable event log come first; every later view (HUD, phone, history, audit) reads from it.
-- Architecture (decided 2026-10-13): Python 3.12 core (voice, brain, policy, agent runner) and a TypeScript/React HUD in an Electron shell over a loopback WebSocket. The HUD in this phase is a light state, transcript and health view; the ASCII orb arrives in Phase 6.
+- Architecture (decided 2026-10-13): Python 3.12 core (voice, brain, policy, agent runner) and a TypeScript/React HUD in an Electron shell over a loopback WebSocket. The HUD in this phase is a light state, transcript and health view around a 2D ASCII network orb (decided 2026-10-14: no plain placeholder orb); Phase 6 upgrades the orb to the full 3D shader version.
 - Early dependency, not a blocker: a short spike at the start calls `GET /models` on every configured provider (Experiential Labs, Groq, Google AI Studio, NVIDIA NIM, OpenRouter) to confirm exact model IDs, streaming, tool calling and vision support, and measures Groq `openai/gpt-oss-120b` against `deepseek-v4-flash` to pick the fast-role primary. Tool calling is needed by Phase 2 and vision by Phase 5. Missing keys skip that provider and never block the phase.
 - English only and headphones assumed for v1, so barge-in does not need speaker-mode echo cancellation (deferred to v2).
 - Research flag: wake-word training on Python 3.12, speech-to-text latency and VRAM on the RTX 4050 (6 GB), Cartesia timestamps and credit metering.
