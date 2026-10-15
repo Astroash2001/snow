@@ -23,6 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Always-On Voice Loop
+
 **Goal:** As a developer, I want to wake Snow by voice and talk with it naturally, so that I can speak to my PC instead of typing.
 **Mode:** mvp
 **Depends on:** Nothing (first phase)
@@ -33,7 +34,71 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Everyday replies use the local voice and big emotional moments use Cartesia; when Cartesia is unreachable or out of credits, Snow keeps talking in the local voice, and when cloud speech-to-text is unreachable it keeps hearing through the local model; changing the LLM provider, base URL, model or fallback order for the brain, fast and vision roles is a configuration edit with no code change; when a provider hits a limit or fails, Snow moves to the next one in the chain, says so briefly, and the HUD shows the active provider; personal data and code never go to providers marked untrusted; API keys live only in Windows Credential Manager and never appear in config files or logs
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log
   5. Every change to Snow's repository runs typed, linted, tested CI, and a failing change cannot be merged
-**Plans:** TBD
+
+**Plans:** 33 plans
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Walking skeleton A: uv project and pins, typed event contract, hub with SQLite event log and loopback WebSocket
+- [ ] 01-02-PLAN.md — Package legitimacy gate (human): pocket-tts, moonshine-voice, chatterbox-tts, livekit-wakeword
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-03-PLAN.md — Walking skeleton B: settings, keyring secrets, HubClient, brain answers through the first fast provider
+- [ ] 01-04-PLAN.md — Full event catalog, snapshot projection, mute persistence, role matrix, JSON Schema and golden samples
+- [ ] 01-05-PLAN.md — Synthetic speech fixtures (wake, pauses, commands, tone) with a wake-score check
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-06-PLAN.md — Walking skeleton C: `snow` CLI, hub entry with scrubbed worker launch, `snow run` and `snow dev say`
+- [ ] 01-07-PLAN.md — HUD toolchain: pinned project, lint/typecheck/test, generated contract types validated against samples
+- [ ] 01-08-PLAN.md — LLM fallback chains, privacy routing and provenance (CORE-04, 08, 10, SAFE-12)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 01-09-PLAN.md — Walking skeleton D: Electron dashboard connected to the hub showing the live conversation
+- [ ] 01-10-PLAN.md — CI on windows-latest, private repo, secret and dependency scans, pre-push hook (QUAL-01)
+- [ ] 01-11-PLAN.md — `snow setup` keys in Credential Manager, redacting structured logs, canary proof (SAFE-09, QUAL-03)
+- [ ] 01-12-PLAN.md — Free-tier limits: header-driven cooldowns and daily counters (CORE-09)
+- [ ] 01-13-PLAN.md — Voice in: wake gate with pre-roll, TurnEngine, Groq speech-to-text, transcript to the brain
+- [ ] 01-14-PLAN.md — Always-on: supervisor with Job Object, health, Task Scheduler autostart, quit, retention (CORE-01, CORE-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 01-15-PLAN.md — HUD reconnect banner, reducer tests, design tokens and renderer lockdown
+- [ ] 01-16-PLAN.md — Jarvis persona, emotion header, tone-aware replies, acknowledgement pool, silent all-providers-down path
+- [ ] 01-17-PLAN.md — Gateway probe and fast-role latency test (D-29, D-30)
+- [ ] 01-18-PLAN.md — Conversation flow: stay awake, wake-alone, pauses, end and sleep phrases, dev WAV input
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 01-19-PLAN.md — HUD ASCII network orb with levels, alert marker and latency proof (HUD-03)
+- [ ] 01-20-PLAN.md — Hard mute that closes the mic, startup mute rule, no-egress and no-disk proofs
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 01-21-PLAN.md — HUD transcript view, mute button, banners and empty states
+- [ ] 01-22-PLAN.md — Moonshine live words and local fallback with the STT router
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 01-23-PLAN.md — HUD health panel, voice card, dashboard layout and visual baseline
+- [ ] 01-24-PLAN.md — Local tone detection attached to every turn
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 01-25-PLAN.md — HUD mini indicator and two-form window model
+- [ ] 01-26-PLAN.md — Voice out: Pocket TTS everyday voice, chunking and playout
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 01-27-PLAN.md — HUD tray, drag and remembered position, single instance, logon mode, quit
+- [ ] 01-28-PLAN.md — Voice router with mid-reply failover and kokoro fallback
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 01-29-PLAN.md — Barge-in and per-turn latency, fake and real-hardware suites
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 01-30-PLAN.md — "Hey Snow" wake model: recipe, user training (human action), calibrated integration
+- [ ] 01-31-PLAN.md — Cartesia big moments with daily budget, credits and failback
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 01-32-PLAN.md — Everyday voice moods, consent-tagged references and voice audition
+
+**Wave 14** *(blocked on Wave 13 completion)*
+- [ ] 01-33-PLAN.md — Chatterbox GPU voice in an isolated environment behind a power and VRAM policy
+
 **UI hint**: yes
 
 Notes:
@@ -44,6 +109,7 @@ Notes:
 - Research flag: wake-word training on Python 3.12, Groq speech-to-text latency and limits, Pocket TTS mood-clip emotion and speed on this CPU, Chatterbox VRAM, tone-detection accuracy, Cartesia timestamps and credit metering.
 
 ### Phase 2: Voice-Driven Claude Code with Safety Gate
+
 **Goal:** As a developer, I want to drive Claude Code by voice behind a safety gate, so that Snow can safely help build Snow.
 **Mode:** mvp
 **Depends on:** Phase 1
@@ -55,6 +121,7 @@ Notes:
   4. Only the enrolled user's voice can start, steer or approve anything: a TV or another person is ignored and shown as ignored on the HUD, and when a secret is needed Snow pauses for the user to enter it directly instead of asking for it aloud
   5. Instructions found in files, agent output or tool results never trigger an action without approval, and every action and decision is written to an append-only, redacted audit log kept separate from the display history
   6. Snow runs from a pinned, versioned copy outside any repository it works on; when Claude Code works on Snow's own repo, the running Snow is never modified
+
 **Plans:** TBD
 **UI hint**: yes
 
@@ -67,6 +134,7 @@ Notes:
 - Dogfooding starts when this phase is verified: Phases 3 to 7 are built by driving Claude Code through Snow.
 
 ### Phase 3: Steerable and Reviewable Agent Work
+
 **Goal:** As a developer, I want to steer and review agent work in isolated worktrees, so that only changes I accept reach my code.
 **Mode:** mvp
 **Depends on:** Phase 2
@@ -77,6 +145,7 @@ Notes:
   3. When the agent finishes, Snow gives a short, outcome-first spoken summary built only from recorded events, never reads code, diffs or logs aloud, and shows the changes on screen
   4. Every coding task runs in its own git worktree, leaving the user's main code untouched; one voice command accepts a task's changes into the main code or discards them entirely
   5. After the user approves, Snow switches its running copy to a newly accepted build of itself; if the new build fails its health check, Snow rolls back to the previous copy automatically
+
 **Plans:** TBD
 **UI hint**: yes
 
@@ -85,6 +154,7 @@ Notes:
 - The full set of live panels (terminal output, diffs, drafts, the app being controlled) is completed in Phase 5, when every panel type has something to show; this phase shows changes through the finished-task view.
 
 ### Phase 4: Hand-off & Phone
+
 **Goal:** As a developer, I want to hand off a task and walk away, so that Snow keeps working and reaches me on my phone.
 **Mode:** mvp
 **Depends on:** Phase 3
@@ -95,6 +165,7 @@ Notes:
   3. From the phone, the user approves or denies with one tap, or answers a question in free text, and the work continues; replies are accepted only from the user's authenticated account, and phone-to-PC traffic runs only over Tailscale
   4. Risk notices and approval requests come by voice and HUD while the user is at the PC, and go to the phone when the user is away or the PC is locked
   5. Back at the PC, the HUD task board lists every task as done, in progress or waiting on the user, and asking "what happened?" returns a short brief of everything done while away; Snow never starts the brief on its own
+
 **Plans:** TBD
 **UI hint**: yes
 
@@ -104,6 +175,7 @@ Notes:
 - Unknown presence is treated as away.
 
 ### Phase 5: PC Control
+
 **Goal:** As a developer, I want to control my apps, settings and files by voice, so that I can run my whole PC without a keyboard.
 **Mode:** mvp
 **Depends on:** Phase 4
@@ -114,6 +186,7 @@ Notes:
   3. When screen control gets stuck or reaches its step limit, Snow stops and tells the user what blocked it instead of looping
   4. Before any message is sent on the user's behalf, the draft is shown and read back, and nothing goes out until the user confirms; live panels show terminal output, diffs, drafts and the app being controlled
   5. User sets up dev tools and runs git and GitHub operations by voice, carried out through the coding agent or the shell under the same risk tiers
+
 **Plans:** TBD
 **UI hint**: yes
 
@@ -123,6 +196,7 @@ Notes:
 - WhatsApp Desktop is the requirement's own example, but research flags account-ban risk for WhatsApp automation; confirm the target app during phase discussion.
 
 ### Phase 6: Glass-box HUD & Jarvis Body
+
 **Goal:** As a developer, I want to watch Snow's glyph-orb HUD on desktop, corner and phone, so that I see what it is doing at a glance.
 **Mode:** mvp
 **Depends on:** Phase 4
@@ -133,6 +207,7 @@ Notes:
   3. While the orb animates, speech recognition does not slow down: the HUD stays inside a fixed GPU budget and lowers its visual detail first
   4. User can shrink the HUD to an always-on-top corner widget showing Snow's state and current action, open the same live HUD in the Android phone browser over Tailscale, and scroll and search the day's history
   5. In silent mode the user follows everything on the HUD with no voice output, and can type commands into the HUD command bar when speaking is not possible
+
 **Plans:** TBD
 **UI hint**: yes
 
@@ -142,6 +217,7 @@ Notes:
 - Time-box the orb art; the orb style is an abstract Jarvis-style network, not a human form.
 
 ### Phase 7: Production Release
+
 **Goal:** As a developer, I want to install and update Snow like a real product, so that it runs reliably, privately and explains failures.
 **Mode:** mvp
 **Depends on:** Phase 6
@@ -151,6 +227,7 @@ Notes:
   2. New releases arrive through auto-update and apply only after the user approves; a release that fails its health check rolls back to the previous version
   3. When anything fails, Snow says plainly what went wrong, by voice and on the HUD, and the exact cause is recorded in the logs
   4. Personal data (audio, transcripts, history, memory, secrets) stays on the PC except where the user approved it; an egress check shows that only what each feature needs leaves the machine (conversation audio to Groq speech-to-text, LLM providers within their privacy-routing limits, Cartesia, minimal Telegram messages)
+
 **Plans:** TBD
 
 Notes:
@@ -164,7 +241,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Always-On Voice Loop | 0/TBD | Not started | - |
+| 1. Always-On Voice Loop | 0/33 | Planned | - |
 | 2. Voice-Driven Claude Code with Safety Gate | 0/TBD | Not started | - |
 | 3. Steerable and Reviewable Agent Work | 0/TBD | Not started | - |
 | 4. Hand-off & Phone | 0/TBD | Not started | - |
