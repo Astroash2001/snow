@@ -1,0 +1,13 @@
+# Provider and role chains. No secrets here: keys live in Windows Credential Manager (service "snow").
+# Plan 01-08 fills every provider and role (D-21, D-22). Per-model quirks go in params/drop_params (D-23).
+
+[providers.groq]
+label = "Groq"
+base_url = "https://api.groq.com/openai/v1"
+key_name = "groq"
+trust = "trusted"
+
+[roles.fast]
+chain = [
+  { provider = "groq", model = "openai/gpt-oss-120b" },
+]
