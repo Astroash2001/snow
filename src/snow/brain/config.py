@@ -21,10 +21,14 @@ class ChainEntry(_Strict):
     model: str
     params: dict[str, object] = {}
     drop_params: list[str] = []
+    match: str = ""  # glob the model probe resolves into `model` (plan 01-17)
+    requires: list[str] = []
+    daily_request_cap: int | None = None
 
 
 class Role(_Strict):
     chain: list[ChainEntry]
+    ttft_timeout_s: float = 6.0  # no first token by then counts as a failure
 
 
 class ModelsConfig(_Strict):

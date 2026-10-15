@@ -9,7 +9,9 @@ from snow.logging import configure
 
 async def _main() -> None:
     client = HubClient(role="brain")
-    client.on_event = BrainWorker(client.publish).on_event
+    worker = BrainWorker(client.publish)
+    client.on_event = worker.on_event
+    client.on_snapshot = worker.on_snapshot
     await client.run()
 
 
