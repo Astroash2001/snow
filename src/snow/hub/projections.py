@@ -22,8 +22,11 @@ from snow.contracts.events import (
     TranscriptFinal,
     TtsSpoken,
     VoiceStatus,
+    WorkerExited,
 )
 from snow.contracts.wire import Snapshot, TranscriptRow
+
+RESTARTING_DETAIL = "Snow is restarting it automatically."
 
 
 def local_midnight_ns(now_ns: int) -> int:
@@ -87,6 +90,14 @@ class Projection:
                 self._rows.append(self._row(event, "system", f"role={event.role}"))
             case HealthSubsystem():
                 self._subsystems[event.name] = event
+            case WorkerExited():
+                # Its component rows (wake word, speech to text...) are stale now; the
+                # restarted worker's own reports replace them.
+                for name, row in self._subsystems.items():
+                    if row.owner == event.worker and name != event.worker:
+                        self._subsystems[name] = row.model_copy(
+                            update={"status": "down", "detail": RESTARTING_DETAIL}
+                        )
             case HealthProvider():
                 self._providers[event.provider] = event
             case HealthRole():
