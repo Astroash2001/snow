@@ -1,13 +1,15 @@
 """The hub: loopback WebSocket server, durable event log, broadcast (CORE-03, T-01-01).
 
 Security (Pitfall 11): bind 127.0.0.1 only, per-launch 256-bit token in the first
-Hello, Host and Origin checks, every inbound message validated with extra=forbid.
+Hello, Host and Origin checks, every inbound message validated with extra=forbid,
+and a role matrix deciding which client may send which command (T-01-53).
 """
 
 import asyncio
 import contextlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -21,18 +23,25 @@ from websockets.asyncio.server import Server, ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request, Response
 
-from snow.contracts.events import Event, TranscriptFinal
+from snow.contracts.events import Event, MuteChanged, TranscriptFinal
 from snow.contracts.wire import (
+    COMMAND_ROLES,
+    AppQuit,
     CommandMsg,
+    DevKill,
     DevSay,
     EventMsg,
     Hello,
+    MuteSet,
     Role,
-    Snapshot,
     SnapshotMsg,
+    SnapshotRequest,
     WireMessage,
 )
 from snow.hub.eventlog import EventLog
+from snow.hub.projections import Projection, local_midnight_ns
+
+log = logging.getLogger(__name__)
 
 HOST = "127.0.0.1"
 HELLO_TIMEOUT_S = 2.0
@@ -40,6 +49,7 @@ MAX_MESSAGE_BYTES = 1_048_576
 CLIENT_QUEUE_MAX = 1000
 CLOSE_INVALID = 4400
 CLOSE_AUTH = 4401
+CLOSE_FORBIDDEN = 4403
 
 _WIRE: TypeAdapter[WireMessage] = TypeAdapter(WireMessage)  # pyright: ignore[reportInvalidTypeArguments]
 _ALWAYS_OK_ORIGINS = frozenset({"null", "file://"})
@@ -70,6 +80,13 @@ class Hub:
         self._server: Server | None = None
         self._clients: set[_Client] = set()
         self._closing: set[asyncio.Task[None]] = set()
+        self._projection = Projection()
+        # Rebuild today's view from the durable log; the persisted mute wins (D-10).
+        for event in event_log.replay(local_midnight_ns(time.time_ns())):
+            self._projection.apply(event)
+        mute = event_log.get_state("mute")
+        if mute is not None:
+            self._projection.set_muted(mute == "1")
 
     @property
     def port(self) -> int:
@@ -110,14 +127,19 @@ class Hub:
             return connection.respond(HTTPStatus.FORBIDDEN, "bad origin\n")
         return None
 
+    def _snapshot_json(self) -> str:
+        snapshot = self._projection.snapshot().model_copy(
+            update={"last_seq": self._log.last_seq()}
+        )
+        return SnapshotMsg(snapshot=snapshot).model_dump_json()
+
     async def _handle(self, ws: ServerConnection) -> None:
         client = await self._authenticate(ws)
         if client is None:
             return
-        # Register and read last_seq with no await between, so no event can fall
+        # Register and snapshot with no await between, so no event can fall
         # in the gap between the snapshot and the live stream.
-        snapshot = SnapshotMsg(snapshot=Snapshot(last_seq=self._log.last_seq()))
-        client.queue.put_nowait(snapshot.model_dump_json())
+        client.queue.put_nowait(self._snapshot_json())
         self._clients.add(client)
         writer = asyncio.create_task(self._writer(client))
         try:
@@ -165,36 +187,70 @@ class Hub:
                 await client.ws.close(CLOSE_INVALID, "source must equal role")
                 return False
             self._publish(msg.event)
-        elif isinstance(msg, CommandMsg) and client.role == "dev":
-            self._on_dev_say(msg.command)
+        elif isinstance(msg, CommandMsg):
+            if client.role not in COMMAND_ROLES[msg.command.type]:
+                await client.ws.close(CLOSE_FORBIDDEN, "command not allowed for role")
+                return False
+            self._on_command(client, msg.command)
         else:
             await client.ws.close(CLOSE_INVALID, "message not allowed")
             return False
         return True
 
-    def _on_dev_say(self, cmd: DevSay) -> None:
-        # D-07: developer-only test input standing in for speech.
+    def _on_command(
+        self,
+        client: _Client,
+        cmd: MuteSet | AppQuit | SnapshotRequest | DevSay | DevKill,
+    ) -> None:
+        match cmd:
+            case MuteSet():
+                self._on_mute_set(cmd)
+            case SnapshotRequest():
+                client.queue.put_nowait(self._snapshot_json())
+            case DevSay():
+                # D-07: developer-only test input standing in for speech.
+                self._publish(
+                    TranscriptFinal(
+                        ts_ns=time.time_ns(),
+                        source="dev",
+                        correlation_id=f"dev-{uuid.uuid4().hex}",
+                        turn_id=uuid.uuid4().hex,
+                        text=cmd.text,
+                        stt_source="dev",
+                    )
+                )
+            case AppQuit() | DevKill():
+                # Accepted and logged here; acted on by the supervisor (plan 01-14).
+                log.info("command accepted: %s from %s", cmd.type, client.role)
+
+    def _on_mute_set(self, cmd: MuteSet) -> None:
+        voice = next((c for c in self._clients if c.role == "voice"), None)
+        if voice is not None:
+            # The voice worker closes the mic, then reports mute.changed itself.
+            self._send(voice, CommandMsg(command=cmd).model_dump_json())
+            return
+        # No voice worker: the mic is already closed, so the hub records the change.
         self._publish(
-            TranscriptFinal(
-                ts_ns=time.time_ns(),
-                source="dev",
-                correlation_id=f"dev-{uuid.uuid4().hex}",
-                turn_id=uuid.uuid4().hex,
-                text=cmd.text,
-            )
+            MuteChanged(ts_ns=time.time_ns(), source="hub", muted=cmd.muted, by=cmd.by)
         )
 
     def _publish(self, event: Event) -> None:
-        """Persist durable events (assigning seq), then broadcast to every client."""
+        """Persist durable events (assigning seq), project, then broadcast to all."""
         if event.durable:
             event = event.model_copy(update={"seq": self._log.append(event)})
+        if isinstance(event, MuteChanged):
+            self._log.set_state("mute", "1" if event.muted else "0")
+        self._projection.apply(event)
         text = EventMsg(event=event).model_dump_json()
         for client in list(self._clients):
-            try:
-                client.queue.put_nowait(text)
-            except asyncio.QueueFull:
-                # Slow consumer: drop it rather than stall everyone else.
-                self._clients.discard(client)
-                task = asyncio.create_task(client.ws.close(1013, "slow consumer"))
-                self._closing.add(task)
-                task.add_done_callback(self._closing.discard)
+            self._send(client, text)
+
+    def _send(self, client: _Client, text: str) -> None:
+        try:
+            client.queue.put_nowait(text)
+        except asyncio.QueueFull:
+            # Slow consumer: drop it rather than stall everyone else.
+            self._clients.discard(client)
+            task = asyncio.create_task(client.ws.close(1013, "slow consumer"))
+            self._closing.add(task)
+            task.add_done_callback(self._closing.discard)

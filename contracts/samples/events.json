@@ -1,0 +1,625 @@
+{
+  "ack.requested": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 10,
+      "source": "brain",
+      "ts_ns": 1760000001000000000,
+      "turn_id": "t1",
+      "type": "ack.requested",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "audio.level": {
+    "event": {
+      "causation_id": null,
+      "channel": "mic",
+      "correlation_id": null,
+      "level": 0.4,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": null,
+      "source": "voice",
+      "ts_ns": 1760000000000000000,
+      "turn_id": "t1",
+      "type": "audio.level",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "cmd.app.quit": {
+    "command": {
+      "type": "cmd.app.quit"
+    },
+    "kind": "command"
+  },
+  "cmd.dev.kill": {
+    "command": {
+      "type": "cmd.dev.kill",
+      "worker": "voice"
+    },
+    "kind": "command"
+  },
+  "cmd.dev.say": {
+    "command": {
+      "text": "hello snow",
+      "type": "cmd.dev.say"
+    },
+    "kind": "command"
+  },
+  "cmd.mute.set": {
+    "command": {
+      "by": "hud",
+      "muted": true,
+      "type": "cmd.mute.set"
+    },
+    "kind": "command"
+  },
+  "cmd.snapshot": {
+    "command": {
+      "type": "cmd.snapshot"
+    },
+    "kind": "command"
+  },
+  "conversation.ended": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "end_reason": "silence",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 3,
+      "source": "voice",
+      "ts_ns": 1760000000300000000,
+      "turn_id": "t1",
+      "type": "conversation.ended",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "conversation.started": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": "conv-1",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 2,
+      "source": "voice",
+      "trigger": "wake",
+      "ts_ns": 1760000000200000000,
+      "turn_id": "t1",
+      "type": "conversation.started",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "health.provider": {
+    "event": {
+      "causation_id": null,
+      "cooling_until_ns": null,
+      "correlation_id": null,
+      "detail": null,
+      "label": "Experiential Labs",
+      "provider": "experiential",
+      "reason": null,
+      "requests_today": 12,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 16,
+      "source": "brain",
+      "status": "active",
+      "tokens_today": 3400,
+      "ts_ns": 1760000001600000000,
+      "turn_id": "t1",
+      "type": "health.provider",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "health.role": {
+    "event": {
+      "active_index": 0,
+      "active_model": "gpt-5.6-luna",
+      "active_provider": "experiential",
+      "causation_id": null,
+      "correlation_id": null,
+      "entries": [
+        {
+          "cooling_until_ns": null,
+          "detail": null,
+          "model": "gpt-5.6-luna",
+          "provider": "experiential",
+          "provider_label": "Experiential Labs",
+          "status": "active"
+        },
+        {
+          "cooling_until_ns": null,
+          "detail": null,
+          "model": "gemini-flash",
+          "provider": "google",
+          "provider_label": "Google AI Studio",
+          "status": "ready"
+        }
+      ],
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "role": "brain",
+      "seq": 17,
+      "source": "brain",
+      "status": "active",
+      "ts_ns": 1760000001700000000,
+      "turn_id": "t1",
+      "type": "health.role",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "health.subsystem": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "detail": null,
+      "label": "Microphone",
+      "name": "mic",
+      "owner": "voice",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 15,
+      "source": "voice",
+      "status": "running",
+      "ts_ns": 1760000001500000000,
+      "turn_id": "t1",
+      "type": "health.subsystem",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "heartbeat": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": null,
+      "source": "voice",
+      "ts_ns": 1760000000000000000,
+      "turn_id": "t1",
+      "type": "heartbeat",
+      "user_id": "owner",
+      "worker": "voice"
+    },
+    "kind": "event"
+  },
+  "llm.blocked_privacy": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "data_class": "private",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "role": "brain",
+      "seq": 13,
+      "source": "brain",
+      "ts_ns": 1760000001300000000,
+      "turn_id": "t1",
+      "type": "llm.blocked_privacy",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "llm.call": {
+    "event": {
+      "causation_id": null,
+      "completion_tokens": 30,
+      "correlation_id": null,
+      "data_class": "general",
+      "error_kind": null,
+      "model": "gpt-5.6-luna",
+      "outcome": "ok",
+      "prompt_tokens": 120,
+      "provider": "experiential",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "role": "brain",
+      "seq": 11,
+      "source": "brain",
+      "total_ms": 900,
+      "ts_ns": 1760000001100000000,
+      "ttft_ms": 420,
+      "turn_id": "t1",
+      "type": "llm.call",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "llm.exhausted": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "role": "brain",
+      "seq": 14,
+      "source": "brain",
+      "ts_ns": 1760000001400000000,
+      "turn_id": "t1",
+      "type": "llm.exhausted",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "llm.switch": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "from_model": "gpt-5.6-luna",
+      "from_provider": "experiential",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "role": "brain",
+      "seq": 12,
+      "source": "brain",
+      "switch_reason": "rate_limit",
+      "to_model": "gemini-flash",
+      "to_provider": "google",
+      "ts_ns": 1760000001200000000,
+      "turn_id": "t1",
+      "type": "llm.switch",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "mute.changed": {
+    "event": {
+      "by": "hud",
+      "causation_id": null,
+      "correlation_id": null,
+      "muted": true,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 5,
+      "source": "voice",
+      "ts_ns": 1760000000500000000,
+      "turn_id": "t1",
+      "type": "mute.changed",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "presence.state": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "mode": "awake",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 4,
+      "source": "voice",
+      "state": "listening",
+      "ts_ns": 1760000000400000000,
+      "turn_id": "t1",
+      "type": "presence.state",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "reply.delta": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": null,
+      "source": "brain",
+      "text": "It is",
+      "ts_ns": 1760000000000000000,
+      "turn_id": "t1",
+      "type": "reply.delta",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "reply.final": {
+    "event": {
+      "big_moment": false,
+      "causation_id": null,
+      "correlation_id": null,
+      "emotion": "neutral",
+      "model": "gpt-5.6-luna",
+      "provider": "experiential",
+      "reason": null,
+      "reply_source": "llm",
+      "result": null,
+      "risk_tier": "free",
+      "seq": 7,
+      "source": "brain",
+      "text": "It is noon.",
+      "ts_ns": 1760000000700000000,
+      "turn_id": "t1",
+      "type": "reply.final",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "reply.interrupted": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 8,
+      "source": "voice",
+      "spoken_text": "It is",
+      "ts_ns": 1760000000800000000,
+      "turn_id": "t1",
+      "type": "reply.interrupted",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "snapshot": {
+    "kind": "snapshot",
+    "snapshot": {
+      "cartesia_chars_today": 0,
+      "conversation_id": "conv-1",
+      "last_seq": 24,
+      "mode": "awake",
+      "muted": false,
+      "presence": "listening",
+      "providers": [],
+      "roles": [],
+      "rows": [
+        {
+          "interrupted": false,
+          "kind": "user",
+          "row_id": "6",
+          "system_event": null,
+          "text": "what is the time",
+          "ts_ns": 1760000000000000000,
+          "turn_id": "t1"
+        }
+      ],
+      "stt": null,
+      "subsystems": [],
+      "voice": null
+    }
+  },
+  "stt.status": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "retry_after_ns": null,
+      "risk_tier": "free",
+      "seq": 18,
+      "source": "voice",
+      "status_reason": "primary",
+      "stt_source": "groq",
+      "ts_ns": 1760000001800000000,
+      "turn_id": "t1",
+      "type": "stt.status",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "transcript.final": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "duration_ms": 0,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 6,
+      "source": "voice",
+      "stt_source": "groq",
+      "text": "what is the time",
+      "tone": {
+        "emotion": "calm",
+        "emotion_confidence": 0.8,
+        "loudness": "normal",
+        "loudness_dbfs": -24.0,
+        "pace": "normal",
+        "pitch_hz_median": 120.0,
+        "words_per_min": 150.0
+      },
+      "ts_ns": 1760000000600000000,
+      "turn_id": "t1",
+      "type": "transcript.final",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "transcript.partial": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": null,
+      "source": "voice",
+      "text": "what is the",
+      "ts_ns": 1760000000000000000,
+      "turn_id": "t1",
+      "type": "transcript.partial",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "tts.spoken": {
+    "event": {
+      "causation_id": null,
+      "chars": 11,
+      "correlation_id": null,
+      "engine": "cartesia",
+      "first_audio_ms": 380,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 21,
+      "source": "voice",
+      "ts_ns": 1760000002100000000,
+      "turn_id": "t1",
+      "type": "tts.spoken",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "turn.cancelled": {
+    "event": {
+      "cancel_reason": "barge_in",
+      "causation_id": null,
+      "correlation_id": null,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 9,
+      "source": "voice",
+      "ts_ns": 1760000000900000000,
+      "turn_id": "t1",
+      "type": "turn.cancelled",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "turn.timing": {
+    "event": {
+      "audio_out_first_ns": 1760000000950000000,
+      "causation_id": null,
+      "correlation_id": null,
+      "llm_first_token_ns": 1760000000700000000,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 22,
+      "source": "voice",
+      "stt_final_ns": 1760000000300000000,
+      "ts_ns": 1760000002200000000,
+      "tts_first_audio_ns": 1760000000900000000,
+      "turn_id": "t1",
+      "type": "turn.timing",
+      "user_id": "owner",
+      "vad_stop_ns": 1760000000000000000
+    },
+    "kind": "event"
+  },
+  "voice.status": {
+    "event": {
+      "cartesia_available": true,
+      "cartesia_reason": "ok",
+      "causation_id": null,
+      "correlation_id": null,
+      "credits_remaining": 9000,
+      "engine": "pocket_tts",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 19,
+      "source": "voice",
+      "ts_ns": 1760000001900000000,
+      "turn_id": "t1",
+      "type": "voice.status",
+      "user_id": "owner",
+      "voice_name": "Snow",
+      "voice_role": "everyday"
+    },
+    "kind": "event"
+  },
+  "voice.switch": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "from_engine": "cartesia",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 20,
+      "source": "voice",
+      "switch_reason": "out_of_credits",
+      "to_engine": "pocket_tts",
+      "ts_ns": 1760000002000000000,
+      "turn_id": "t1",
+      "type": "voice.switch",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "wake.detected": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "model": "hey_snow",
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "score": 0.93,
+      "seq": 1,
+      "source": "voice",
+      "ts_ns": 1760000000100000000,
+      "turn_id": "t1",
+      "type": "wake.detected",
+      "user_id": "owner"
+    },
+    "kind": "event"
+  },
+  "worker.exited": {
+    "event": {
+      "causation_id": null,
+      "cause": "crash",
+      "correlation_id": null,
+      "exit_code": 1,
+      "pid": 4242,
+      "reason": null,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 24,
+      "source": "voice",
+      "ts_ns": 1760000002400000000,
+      "turn_id": "t1",
+      "type": "worker.exited",
+      "user_id": "owner",
+      "worker": "voice"
+    },
+    "kind": "event"
+  },
+  "worker.started": {
+    "event": {
+      "causation_id": null,
+      "correlation_id": null,
+      "pid": 4242,
+      "reason": null,
+      "restart_count": 0,
+      "result": null,
+      "risk_tier": "free",
+      "seq": 23,
+      "source": "voice",
+      "ts_ns": 1760000002300000000,
+      "turn_id": "t1",
+      "type": "worker.started",
+      "user_id": "owner",
+      "worker": "voice"
+    },
+    "kind": "event"
+  }
+}

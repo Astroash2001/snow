@@ -1,0 +1,4838 @@
+{
+  "$defs": {
+    "AckRequested": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "ack.requested",
+          "default": "ack.requested",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source"
+      ],
+      "title": "AckRequested",
+      "type": "object"
+    },
+    "AppQuit": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "cmd.app.quit",
+          "default": "cmd.app.quit",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "AppQuit",
+      "type": "object"
+    },
+    "AudioLevel": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "channel": {
+          "enum": [
+            "mic",
+            "tts"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "level": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Level",
+          "type": "number"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "audio.level",
+          "default": "audio.level",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "channel",
+        "level"
+      ],
+      "title": "AudioLevel",
+      "type": "object"
+    },
+    "ChainEntryStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "cooling_until_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cooling Until Ns"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "provider_label": {
+          "title": "Provider Label",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "active",
+            "cooling_down",
+            "failing",
+            "not_configured"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "provider_label",
+        "model",
+        "status"
+      ],
+      "title": "ChainEntryStatus",
+      "type": "object"
+    },
+    "CommandMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "discriminator": {
+            "mapping": {
+              "cmd.app.quit": "#/$defs/AppQuit",
+              "cmd.dev.kill": "#/$defs/DevKill",
+              "cmd.dev.say": "#/$defs/DevSay",
+              "cmd.mute.set": "#/$defs/MuteSet",
+              "cmd.snapshot": "#/$defs/SnapshotRequest"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/MuteSet"
+            },
+            {
+              "$ref": "#/$defs/AppQuit"
+            },
+            {
+              "$ref": "#/$defs/SnapshotRequest"
+            },
+            {
+              "$ref": "#/$defs/DevSay"
+            },
+            {
+              "$ref": "#/$defs/DevKill"
+            }
+          ],
+          "title": "Command"
+        },
+        "kind": {
+          "const": "command",
+          "default": "command",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "CommandMsg",
+      "type": "object"
+    },
+    "ConversationEnded": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "end_reason": {
+          "enum": [
+            "silence",
+            "phrase",
+            "sleep",
+            "mute",
+            "dev"
+          ],
+          "title": "End Reason",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "conversation.ended",
+          "default": "conversation.ended",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "end_reason"
+      ],
+      "title": "ConversationEnded",
+      "type": "object"
+    },
+    "ConversationStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "trigger": {
+          "enum": [
+            "wake",
+            "dev"
+          ],
+          "title": "Trigger",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "conversation.started",
+          "default": "conversation.started",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "trigger"
+      ],
+      "title": "ConversationStarted",
+      "type": "object"
+    },
+    "DevKill": {
+      "additionalProperties": false,
+      "description": "Developer-only: kill a worker to test supervision (plan 01-14 implements it).",
+      "properties": {
+        "type": {
+          "const": "cmd.dev.kill",
+          "default": "cmd.dev.kill",
+          "title": "Type",
+          "type": "string"
+        },
+        "worker": {
+          "enum": [
+            "voice",
+            "brain",
+            "hud"
+          ],
+          "title": "Worker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "worker"
+      ],
+      "title": "DevKill",
+      "type": "object"
+    },
+    "DevSay": {
+      "additionalProperties": false,
+      "description": "Developer-only test input (D-07): a typed line standing in for speech.",
+      "properties": {
+        "text": {
+          "maxLength": 2000,
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "cmd.dev.say",
+          "default": "cmd.dev.say",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "DevSay",
+      "type": "object"
+    },
+    "EventMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "discriminator": {
+            "mapping": {
+              "ack.requested": "#/$defs/AckRequested",
+              "audio.level": "#/$defs/AudioLevel",
+              "conversation.ended": "#/$defs/ConversationEnded",
+              "conversation.started": "#/$defs/ConversationStarted",
+              "health.provider": "#/$defs/HealthProvider",
+              "health.role": "#/$defs/HealthRole",
+              "health.subsystem": "#/$defs/HealthSubsystem",
+              "heartbeat": "#/$defs/Heartbeat",
+              "llm.blocked_privacy": "#/$defs/LlmBlockedPrivacy",
+              "llm.call": "#/$defs/LlmCall",
+              "llm.exhausted": "#/$defs/LlmExhausted",
+              "llm.switch": "#/$defs/LlmSwitch",
+              "mute.changed": "#/$defs/MuteChanged",
+              "presence.state": "#/$defs/PresenceState",
+              "reply.delta": "#/$defs/ReplyDelta",
+              "reply.final": "#/$defs/ReplyFinal",
+              "reply.interrupted": "#/$defs/ReplyInterrupted",
+              "stt.status": "#/$defs/SttStatus",
+              "transcript.final": "#/$defs/TranscriptFinal",
+              "transcript.partial": "#/$defs/TranscriptPartial",
+              "tts.spoken": "#/$defs/TtsSpoken",
+              "turn.cancelled": "#/$defs/TurnCancelled",
+              "turn.timing": "#/$defs/TurnTiming",
+              "voice.status": "#/$defs/VoiceStatus",
+              "voice.switch": "#/$defs/VoiceSwitch",
+              "wake.detected": "#/$defs/WakeDetected",
+              "worker.exited": "#/$defs/WorkerExited",
+              "worker.started": "#/$defs/WorkerStarted"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/WakeDetected"
+            },
+            {
+              "$ref": "#/$defs/ConversationStarted"
+            },
+            {
+              "$ref": "#/$defs/ConversationEnded"
+            },
+            {
+              "$ref": "#/$defs/PresenceState"
+            },
+            {
+              "$ref": "#/$defs/MuteChanged"
+            },
+            {
+              "$ref": "#/$defs/AudioLevel"
+            },
+            {
+              "$ref": "#/$defs/TranscriptPartial"
+            },
+            {
+              "$ref": "#/$defs/TranscriptFinal"
+            },
+            {
+              "$ref": "#/$defs/ReplyDelta"
+            },
+            {
+              "$ref": "#/$defs/ReplyFinal"
+            },
+            {
+              "$ref": "#/$defs/ReplyInterrupted"
+            },
+            {
+              "$ref": "#/$defs/TurnCancelled"
+            },
+            {
+              "$ref": "#/$defs/AckRequested"
+            },
+            {
+              "$ref": "#/$defs/LlmCall"
+            },
+            {
+              "$ref": "#/$defs/LlmSwitch"
+            },
+            {
+              "$ref": "#/$defs/LlmBlockedPrivacy"
+            },
+            {
+              "$ref": "#/$defs/LlmExhausted"
+            },
+            {
+              "$ref": "#/$defs/HealthSubsystem"
+            },
+            {
+              "$ref": "#/$defs/HealthProvider"
+            },
+            {
+              "$ref": "#/$defs/HealthRole"
+            },
+            {
+              "$ref": "#/$defs/SttStatus"
+            },
+            {
+              "$ref": "#/$defs/VoiceStatus"
+            },
+            {
+              "$ref": "#/$defs/VoiceSwitch"
+            },
+            {
+              "$ref": "#/$defs/TtsSpoken"
+            },
+            {
+              "$ref": "#/$defs/TurnTiming"
+            },
+            {
+              "$ref": "#/$defs/WorkerStarted"
+            },
+            {
+              "$ref": "#/$defs/WorkerExited"
+            },
+            {
+              "$ref": "#/$defs/Heartbeat"
+            }
+          ],
+          "title": "Event"
+        },
+        "kind": {
+          "const": "event",
+          "default": "event",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "title": "EventMsg",
+      "type": "object"
+    },
+    "HealthProvider": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "cooling_until_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cooling Until Ns"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "requests_today": {
+          "default": 0,
+          "title": "Requests Today",
+          "type": "integer"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "active",
+            "cooling_down",
+            "failing",
+            "not_configured"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "tokens_today": {
+          "default": 0,
+          "title": "Tokens Today",
+          "type": "integer"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "health.provider",
+          "default": "health.provider",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "provider",
+        "label",
+        "status"
+      ],
+      "title": "HealthProvider",
+      "type": "object"
+    },
+    "HealthRole": {
+      "additionalProperties": false,
+      "properties": {
+        "active_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active Index"
+        },
+        "active_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active Model"
+        },
+        "active_provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active Provider"
+        },
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/ChainEntryStatus"
+          },
+          "title": "Entries",
+          "type": "array"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "brain",
+            "fast",
+            "vision"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "fallback",
+            "cooling_down",
+            "failing",
+            "not_configured",
+            "not_used_yet"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "health.role",
+          "default": "health.role",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "role",
+        "status"
+      ],
+      "title": "HealthRole",
+      "type": "object"
+    },
+    "HealthSubsystem": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "owner": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud"
+          ],
+          "title": "Owner",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "starting",
+            "restarting",
+            "down"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "health.subsystem",
+          "default": "health.subsystem",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "name",
+        "label",
+        "owner",
+        "status"
+      ],
+      "title": "HealthSubsystem",
+      "type": "object"
+    },
+    "Heartbeat": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "heartbeat",
+          "default": "heartbeat",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        },
+        "worker": {
+          "title": "Worker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "worker"
+      ],
+      "title": "Heartbeat",
+      "type": "object"
+    },
+    "Hello": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "hello",
+          "default": "hello",
+          "title": "Kind",
+          "type": "string"
+        },
+        "protocol": {
+          "default": 1,
+          "title": "Protocol",
+          "type": "integer"
+        },
+        "role": {
+          "enum": [
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "token": {
+          "title": "Token",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "token"
+      ],
+      "title": "Hello",
+      "type": "object"
+    },
+    "LlmBlockedPrivacy": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "data_class": {
+          "enum": [
+            "general",
+            "private"
+          ],
+          "title": "Data Class",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "brain",
+            "fast",
+            "vision"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "llm.blocked_privacy",
+          "default": "llm.blocked_privacy",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "role",
+        "data_class"
+      ],
+      "title": "LlmBlockedPrivacy",
+      "type": "object"
+    },
+    "LlmCall": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "completion_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Tokens"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "data_class": {
+          "enum": [
+            "general",
+            "private"
+          ],
+          "title": "Data Class",
+          "type": "string"
+        },
+        "error_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Kind"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "error",
+            "cancelled"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "brain",
+            "fast",
+            "vision"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "total_ms": {
+          "title": "Total Ms",
+          "type": "integer"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "ttft_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ttft Ms"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "llm.call",
+          "default": "llm.call",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "role",
+        "provider",
+        "model",
+        "data_class",
+        "total_ms",
+        "outcome"
+      ],
+      "title": "LlmCall",
+      "type": "object"
+    },
+    "LlmExhausted": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "brain",
+            "fast",
+            "vision"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "llm.exhausted",
+          "default": "llm.exhausted",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "role"
+      ],
+      "title": "LlmExhausted",
+      "type": "object"
+    },
+    "LlmSwitch": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "from_model": {
+          "title": "From Model",
+          "type": "string"
+        },
+        "from_provider": {
+          "title": "From Provider",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "brain",
+            "fast",
+            "vision"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "switch_reason": {
+          "enum": [
+            "rate_limit",
+            "out_of_quota",
+            "service_error",
+            "timeout",
+            "unreachable",
+            "bad_key",
+            "config_error"
+          ],
+          "title": "Switch Reason",
+          "type": "string"
+        },
+        "to_model": {
+          "title": "To Model",
+          "type": "string"
+        },
+        "to_provider": {
+          "title": "To Provider",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "llm.switch",
+          "default": "llm.switch",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "role",
+        "from_provider",
+        "from_model",
+        "to_provider",
+        "to_model",
+        "switch_reason"
+      ],
+      "title": "LlmSwitch",
+      "type": "object"
+    },
+    "MuteChanged": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "enum": [
+            "voice",
+            "hud",
+            "tray",
+            "startup"
+          ],
+          "title": "By",
+          "type": "string"
+        },
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "muted": {
+          "title": "Muted",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "mute.changed",
+          "default": "mute.changed",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "muted",
+        "by"
+      ],
+      "title": "MuteChanged",
+      "type": "object"
+    },
+    "MuteSet": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "enum": [
+            "hud",
+            "tray"
+          ],
+          "title": "By",
+          "type": "string"
+        },
+        "muted": {
+          "title": "Muted",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "cmd.mute.set",
+          "default": "cmd.mute.set",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "muted",
+        "by"
+      ],
+      "title": "MuteSet",
+      "type": "object"
+    },
+    "PresenceState": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "mode": {
+          "enum": [
+            "awake",
+            "soft_sleep"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "sleeping",
+            "listening",
+            "thinking",
+            "speaking",
+            "muted"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "presence.state",
+          "default": "presence.state",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "state",
+        "mode"
+      ],
+      "title": "PresenceState",
+      "type": "object"
+    },
+    "ReplyDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "reply.delta",
+          "default": "reply.delta",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "text"
+      ],
+      "title": "ReplyDelta",
+      "type": "object"
+    },
+    "ReplyFinal": {
+      "additionalProperties": false,
+      "properties": {
+        "big_moment": {
+          "title": "Big Moment",
+          "type": "boolean"
+        },
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "emotion": {
+          "title": "Emotion",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "reply_source": {
+          "enum": [
+            "llm",
+            "ack_pool",
+            "fallback"
+          ],
+          "title": "Reply Source",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "reply.final",
+          "default": "reply.final",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "emotion",
+        "big_moment",
+        "reply_source"
+      ],
+      "title": "ReplyFinal",
+      "type": "object"
+    },
+    "ReplyInterrupted": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "spoken_text": {
+          "title": "Spoken Text",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "reply.interrupted",
+          "default": "reply.interrupted",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "spoken_text"
+      ],
+      "title": "ReplyInterrupted",
+      "type": "object"
+    },
+    "Snapshot": {
+      "additionalProperties": false,
+      "description": "Everything a client needs to draw the current state; all fields have defaults.",
+      "properties": {
+        "cartesia_chars_today": {
+          "default": 0,
+          "title": "Cartesia Chars Today",
+          "type": "integer"
+        },
+        "conversation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Id"
+        },
+        "last_seq": {
+          "default": 0,
+          "title": "Last Seq",
+          "type": "integer"
+        },
+        "mode": {
+          "default": "awake",
+          "enum": [
+            "awake",
+            "soft_sleep"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "muted": {
+          "default": false,
+          "title": "Muted",
+          "type": "boolean"
+        },
+        "presence": {
+          "default": "sleeping",
+          "enum": [
+            "sleeping",
+            "listening",
+            "thinking",
+            "speaking",
+            "muted"
+          ],
+          "title": "Presence",
+          "type": "string"
+        },
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/HealthProvider"
+          },
+          "title": "Providers",
+          "type": "array"
+        },
+        "roles": {
+          "items": {
+            "$ref": "#/$defs/HealthRole"
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/TranscriptRow"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "stt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SttStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "subsystems": {
+          "items": {
+            "$ref": "#/$defs/HealthSubsystem"
+          },
+          "title": "Subsystems",
+          "type": "array"
+        },
+        "voice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VoiceStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Snapshot",
+      "type": "object"
+    },
+    "SnapshotMsg": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "snapshot",
+          "default": "snapshot",
+          "title": "Kind",
+          "type": "string"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/Snapshot"
+        }
+      },
+      "required": [
+        "snapshot"
+      ],
+      "title": "SnapshotMsg",
+      "type": "object"
+    },
+    "SnapshotRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "cmd.snapshot",
+          "default": "cmd.snapshot",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "SnapshotRequest",
+      "type": "object"
+    },
+    "SttStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "retry_after_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retry After Ns"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status_reason": {
+          "enum": [
+            "primary",
+            "unreachable",
+            "rate_limited",
+            "no_key",
+            "offline"
+          ],
+          "title": "Status Reason",
+          "type": "string"
+        },
+        "stt_source": {
+          "enum": [
+            "groq",
+            "local"
+          ],
+          "title": "Stt Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "stt.status",
+          "default": "stt.status",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "stt_source",
+        "status_reason"
+      ],
+      "title": "SttStatus",
+      "type": "object"
+    },
+    "Tone": {
+      "additionalProperties": false,
+      "description": "Locally detected tone of the user's utterance (D-32 to D-39).",
+      "properties": {
+        "emotion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emotion"
+        },
+        "emotion_confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emotion Confidence"
+        },
+        "loudness": {
+          "enum": [
+            "quiet",
+            "normal",
+            "loud"
+          ],
+          "title": "Loudness",
+          "type": "string"
+        },
+        "loudness_dbfs": {
+          "title": "Loudness Dbfs",
+          "type": "number"
+        },
+        "pace": {
+          "enum": [
+            "slow",
+            "normal",
+            "fast"
+          ],
+          "title": "Pace",
+          "type": "string"
+        },
+        "pitch_hz_median": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pitch Hz Median"
+        },
+        "words_per_min": {
+          "title": "Words Per Min",
+          "type": "number"
+        }
+      },
+      "required": [
+        "pace",
+        "loudness",
+        "words_per_min",
+        "loudness_dbfs"
+      ],
+      "title": "Tone",
+      "type": "object"
+    },
+    "TranscriptFinal": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "duration_ms": {
+          "default": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "stt_source": {
+          "default": "dev",
+          "enum": [
+            "groq",
+            "local",
+            "dev"
+          ],
+          "title": "Stt Source",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "tone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "transcript.final",
+          "default": "transcript.final",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "text"
+      ],
+      "title": "TranscriptFinal",
+      "type": "object"
+    },
+    "TranscriptPartial": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "transcript.partial",
+          "default": "transcript.partial",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "text"
+      ],
+      "title": "TranscriptPartial",
+      "type": "object"
+    },
+    "TranscriptRow": {
+      "additionalProperties": false,
+      "properties": {
+        "interrupted": {
+          "default": false,
+          "title": "Interrupted",
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "user",
+            "snow",
+            "system"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "row_id": {
+          "title": "Row Id",
+          "type": "string"
+        },
+        "system_event": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Event"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        }
+      },
+      "required": [
+        "row_id",
+        "kind",
+        "text",
+        "ts_ns"
+      ],
+      "title": "TranscriptRow",
+      "type": "object"
+    },
+    "TtsSpoken": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "chars": {
+          "title": "Chars",
+          "type": "integer"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "engine": {
+          "enum": [
+            "pocket_tts",
+            "cartesia",
+            "chatterbox",
+            "kokoro"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "first_audio_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Audio Ms"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "tts.spoken",
+          "default": "tts.spoken",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "engine",
+        "chars"
+      ],
+      "title": "TtsSpoken",
+      "type": "object"
+    },
+    "TurnCancelled": {
+      "additionalProperties": false,
+      "properties": {
+        "cancel_reason": {
+          "enum": [
+            "barge_in",
+            "conversation_end",
+            "mute"
+          ],
+          "title": "Cancel Reason",
+          "type": "string"
+        },
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "turn.cancelled",
+          "default": "turn.cancelled",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "cancel_reason"
+      ],
+      "title": "TurnCancelled",
+      "type": "object"
+    },
+    "TurnTiming": {
+      "additionalProperties": false,
+      "description": "Wall-clock nanoseconds so values compare across processes.",
+      "properties": {
+        "audio_out_first_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio Out First Ns"
+        },
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "llm_first_token_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm First Token Ns"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "stt_final_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stt Final Ns"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "tts_first_audio_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tts First Audio Ns"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "turn.timing",
+          "default": "turn.timing",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        },
+        "vad_stop_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vad Stop Ns"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source"
+      ],
+      "title": "TurnTiming",
+      "type": "object"
+    },
+    "VoiceStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "cartesia_available": {
+          "title": "Cartesia Available",
+          "type": "boolean"
+        },
+        "cartesia_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "ok",
+                "out_of_credits",
+                "unreachable",
+                "no_key",
+                "budget_reached"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cartesia Reason"
+        },
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "credits_remaining": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credits Remaining"
+        },
+        "engine": {
+          "enum": [
+            "pocket_tts",
+            "cartesia",
+            "chatterbox",
+            "kokoro"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "voice.status",
+          "default": "voice.status",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        },
+        "voice_name": {
+          "title": "Voice Name",
+          "type": "string"
+        },
+        "voice_role": {
+          "enum": [
+            "everyday",
+            "big_moment",
+            "gpu",
+            "fallback"
+          ],
+          "title": "Voice Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "engine",
+        "voice_name",
+        "voice_role",
+        "cartesia_available"
+      ],
+      "title": "VoiceStatus",
+      "type": "object"
+    },
+    "VoiceSwitch": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "from_engine": {
+          "enum": [
+            "pocket_tts",
+            "cartesia",
+            "chatterbox",
+            "kokoro"
+          ],
+          "title": "From Engine",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "switch_reason": {
+          "enum": [
+            "out_of_credits",
+            "unreachable",
+            "no_key",
+            "budget_reached",
+            "power",
+            "gpu_busy",
+            "load_failed"
+          ],
+          "title": "Switch Reason",
+          "type": "string"
+        },
+        "to_engine": {
+          "enum": [
+            "pocket_tts",
+            "cartesia",
+            "chatterbox",
+            "kokoro"
+          ],
+          "title": "To Engine",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "voice.switch",
+          "default": "voice.switch",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "from_engine",
+        "to_engine",
+        "switch_reason"
+      ],
+      "title": "VoiceSwitch",
+      "type": "object"
+    },
+    "WakeDetected": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "wake.detected",
+          "default": "wake.detected",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "score",
+        "model"
+      ],
+      "title": "WakeDetected",
+      "type": "object"
+    },
+    "WorkerExited": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "cause": {
+          "enum": [
+            "crash",
+            "hang",
+            "killed",
+            "quit"
+          ],
+          "title": "Cause",
+          "type": "string"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exit Code"
+        },
+        "pid": {
+          "title": "Pid",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "worker.exited",
+          "default": "worker.exited",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        },
+        "worker": {
+          "enum": [
+            "voice",
+            "brain",
+            "hud"
+          ],
+          "title": "Worker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "worker",
+        "pid",
+        "cause"
+      ],
+      "title": "WorkerExited",
+      "type": "object"
+    },
+    "WorkerStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Causation Id"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation Id"
+        },
+        "pid": {
+          "title": "Pid",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "restart_count": {
+          "default": 0,
+          "title": "Restart Count",
+          "type": "integer"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "risk_tier": {
+          "default": "free",
+          "enum": [
+            "free",
+            "announce",
+            "ask",
+            "always_ask"
+          ],
+          "title": "Risk Tier",
+          "type": "string"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "source": {
+          "enum": [
+            "hub",
+            "voice",
+            "brain",
+            "hud",
+            "dev"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ts_ns": {
+          "title": "Ts Ns",
+          "type": "integer"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turn Id"
+        },
+        "type": {
+          "const": "worker.started",
+          "default": "worker.started",
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "default": "owner",
+          "title": "User Id",
+          "type": "string"
+        },
+        "worker": {
+          "enum": [
+            "voice",
+            "brain",
+            "hud"
+          ],
+          "title": "Worker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts_ns",
+        "source",
+        "worker",
+        "pid"
+      ],
+      "title": "WorkerStarted",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "command": "#/$defs/CommandMsg",
+      "event": "#/$defs/EventMsg",
+      "hello": "#/$defs/Hello",
+      "snapshot": "#/$defs/SnapshotMsg"
+    },
+    "propertyName": "kind"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Hello"
+    },
+    {
+      "$ref": "#/$defs/EventMsg"
+    },
+    {
+      "$ref": "#/$defs/CommandMsg"
+    },
+    {
+      "$ref": "#/$defs/SnapshotMsg"
+    }
+  ]
+}
