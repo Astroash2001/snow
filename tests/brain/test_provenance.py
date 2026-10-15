@@ -1,4 +1,4 @@
-"""CORE-10, D-28: every call and reply records its source; health rows show who serves."""
+"""CORE-10, D-28: every call and reply records its source; health shows who serves."""
 
 import time
 

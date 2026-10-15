@@ -32,6 +32,7 @@ from snow.contracts.events import (
     Event,
     HealthProvider,
     HealthRole,
+    LlmBlockedPrivacy,
     LlmCall,
     LlmExhausted,
     LlmRole,
@@ -196,11 +197,15 @@ class LLMChain:
     ) -> ChainStream:
         trace = trace or Trace()
         failed: dict[int, SwitchReason] = {}
+        blocked: set[int] = set()  # skipped by the privacy rule only
         last_failed: tuple[ChainEntry, SwitchReason] | None = None
         for index, entry in enumerate(self._role.chain):
             provider = self._models.providers[entry.provider]
             secret = self._get_secret(provider.key_name)
             if secret is None or not entry.model:
+                continue
+            if data_class == "private" and provider.trust == "untrusted":
+                blocked.add(index)  # SAFE-12: never send private data here
                 continue
             started = self._now()
             try:
@@ -230,7 +235,7 @@ class LLMChain:
             if last_failed is not None:
                 await self._announce_switch(last_failed, entry, trace)
             self._board[entry.provider] = ("active", None)
-            await self._publish_health(served=index, failed=failed)
+            await self._publish_health(served=index, failed=failed, blocked=blocked)
             chunks = self._drain(
                 entry, data_class, trace, raw_stream, first_text, started, ttft_ms
             )
@@ -241,7 +246,18 @@ class LLMChain:
                 headers=headers,
                 chunks=chunks,
             )
-        await self._publish_health(served=None, failed=failed)
+        await self._publish_health(served=None, failed=failed, blocked=blocked)
+        if blocked:
+            await self._emit(
+                LlmBlockedPrivacy(
+                    ts_ns=time.time_ns(),
+                    source="brain",
+                    role=self._role_name,
+                    data_class=data_class,
+                    **trace.__dict__,
+                )
+            )
+            raise PrivacyBlockedError(self._role_name, data_class)
         await self._emit(
             LlmExhausted(
                 ts_ns=time.time_ns(),
@@ -425,6 +441,7 @@ class LLMChain:
         entry: ChainEntry,
         served: int | None,
         failed: dict[int, SwitchReason],
+        blocked: set[int],
     ) -> ChainEntryStatus:
         provider = self._models.providers[entry.provider]
         status: ProviderStatus = "ready"
@@ -434,6 +451,8 @@ class LLMChain:
         elif not entry.model:
             status = "not_configured"
             detail = "Model ID not resolved; run snow dev probe-models"
+        elif index in blocked:
+            detail = "Skipped: private data stays off untrusted providers"
         elif index in failed:
             status, detail = "failing", failed[index]
         elif index == served:
@@ -447,11 +466,18 @@ class LLMChain:
         )
 
     async def _publish_health(
-        self, *, served: int | None, failed: dict[int, SwitchReason], used: bool = True
+        self,
+        *,
+        served: int | None,
+        failed: dict[int, SwitchReason],
+        blocked: set[int] | None = None,
+        used: bool = True,
     ) -> None:
+        blocked = blocked or set()
         chain = self._role.chain
         entries = [
-            self._entry_status(i, e, served, failed) for i, e in enumerate(chain)
+            self._entry_status(i, e, served, failed, blocked)
+            for i, e in enumerate(chain)
         ]
         status: Literal[
             "active", "fallback", "failing", "not_configured", "not_used_yet"

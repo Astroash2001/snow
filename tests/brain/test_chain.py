@@ -185,7 +185,7 @@ async def test_exhausted_chain_raises_and_emits(
     for h in hosts:
         error_route(routes, h, 500)
     with pytest.raises(AllProvidersFailed):
-        await chain_factory("fast").stream(MSG)
+        await chain_factory("fast").stream(MSG, data_class="general")
     assert [routes.count(h) for h in hosts] == [1, 1, 1, 1]
     assert len(events.of("llm.exhausted")) == 1
     assert len([c for c in events.of("llm.call") if c.outcome == "error"]) == 4
