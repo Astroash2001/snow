@@ -95,8 +95,8 @@ async def test_provider_failure_before_first_token_publishes_no_reply(
     snow_dirs: SnowDirs, memory_keyring: InMemoryKeyring, mock_provider: MockProvider
 ) -> None:
     memory_keyring.set_password("snow", "groq", "gsk_test")
-    # Both keyed fast entries (gpt-oss, qwen) fail; plan 01-08 records the failures.
-    mock_provider.responses += [httpx2.Response(500, json={"error": "boom"})] * 2
+    # The first groq entry fails and cools groq, so its second entry is skipped.
+    mock_provider.responses += [httpx2.Response(500, json={"error": "boom"})]
     published: list[Event] = []
 
     async def collect(ev: Event) -> None:
@@ -105,7 +105,7 @@ async def test_provider_failure_before_first_token_publishes_no_reply(
     await BrainWorker(collect).on_event(
         TranscriptFinal(ts_ns=time.time_ns(), source="dev", text="hi")
     )
-    assert len(mock_provider.requests) == 2  # one per entry: SDK retries are off
+    assert len(mock_provider.requests) == 1  # cooldown spares the second groq entry
     types = {ev.type for ev in published}
     assert {"llm.call", "llm.exhausted"} <= types
     assert not types & {"reply.delta", "reply.final"}

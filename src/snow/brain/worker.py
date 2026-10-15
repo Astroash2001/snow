@@ -22,6 +22,7 @@ from snow.brain.chain import (
     Trace,
 )
 from snow.brain.config import ModelsConfig, PersonaConfig
+from snow.brain.limits import RateLimiter
 from snow.config.secrets import get_secret
 from snow.config.settings import load_config
 from snow.contracts.events import (
@@ -52,6 +53,9 @@ class BrainWorker:
         self._client_factory = client_factory
         self._models: ModelsConfig | None = None
         self._chains: dict[LlmRole, LLMChain] = {}
+        self._limiter = (
+            RateLimiter()
+        )  # one per brain process: counters are per provider (D-27)
 
     async def _chain(self, models: ModelsConfig, role: LlmRole) -> LLMChain:
         # Config is re-read every turn; chains are rebuilt only when it changed.
@@ -59,6 +63,7 @@ class BrainWorker:
             for old in self._chains.values():
                 await old.aclose()
             board: ProviderBoard = {}
+            self._limiter.defaults = models.limits
             self._chains = {
                 r: LLMChain(
                     models,
@@ -67,6 +72,7 @@ class BrainWorker:
                     emit=self._publish,
                     client_factory=self._client_factory,
                     board=board,
+                    limiter=self._limiter,
                 )
                 for r in ROLES
             }
