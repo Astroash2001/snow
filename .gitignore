@@ -1,1 +1,11 @@
 .planning/research/.cache/
+.venv/
+__pycache__/
+*.pyc
+hud/node_modules/
+hud/out/
+hud/test-results/
+models/
+.pytest_cache/
+.ruff_cache/
+.pytest_tmp/

@@ -1,0 +1,74 @@
+[project]
+name = "snow"
+version = "0.1.0"
+description = "Snow: always-on voice assistant core (hub, voice, brain)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "openai==3.29.0",
+    "pydantic==2.14.1",
+    "websockets==17.2",
+    "keyring==25.7.0",
+    "structlog==26.1.0",
+    "sounddevice==0.5.6",
+    "openwakeword==0.6.0",
+    "pipecat-ai[silero]==1.12.0",
+    "kokoro-onnx==0.6.1",
+    "psutil==7.2.2",
+    "pywin32==312; sys_platform == 'win32'",
+    "numpy",
+    "soundfile",
+]
+
+[project.scripts]
+snow = "snow.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "respx",
+    "ruff==0.17.0",
+    "pyright==1.1.414",
+    "pip-audit",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv]
+# Delayed adoption: new releases wait before entering the lock (supply-chain policy).
+exclude-newer = "2026-10-08T00:00:00Z"
+# openai 3.29.0, pydantic 2.14.1 (+ its pydantic-core) and ruff 0.17.0 (exact pins from STACK.md/RESEARCH.md) were
+# published after the global cutoff; each is pinned ==, so the per-package override is safe.
+exclude-newer-package = { openai = "2026-10-12T00:00:00Z", pydantic = "2026-10-12T00:00:00Z", pydantic-core = "2026-10-12T00:00:00Z", ruff = "2026-10-10T00:00:00Z" }
+# Windows 11 is the only host; openwakeword pulls linux-only tflite-runtime with no cp312 wheel.
+environments = ["sys_platform == 'win32'"]
+
+[tool.ruff]
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+include = ["src/snow"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "hardware: needs a real mic/speaker",
+    "gpu: needs the NVIDIA GPU",
+    "slow: long-running test",
+    "network: needs network access",
+]
+# --basetemp: a stale, ACL-locked pytest-of-<user> dir in %TEMP% breaks tmp_path on this machine.
+addopts = '-m "not hardware and not gpu and not slow and not network" --basetemp=.pytest_tmp'
