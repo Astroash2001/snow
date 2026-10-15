@@ -4,8 +4,19 @@ import json
 import re
 import sqlite3
 from pathlib import Path
+from typing import Any, get_args
 
-from snow.contracts.events import ENVELOPE_FIELDS, Envelope
+from pydantic import TypeAdapter, ValidationError
+
+from snow.contracts.events import ENVELOPE_FIELDS, Envelope, Event
+
+_EVENT: TypeAdapter[Envelope] = TypeAdapter(Event)  # pyright: ignore[reportInvalidTypeArguments]
+# type literal -> payload field that was moved into the `content` column.
+_CONTENT_FIELDS: dict[str, str] = {
+    str(cls.model_fields["type"].default): cls.content_field
+    for cls in get_args(get_args(Event)[0])
+    if cls.content_field
+}
 
 _MIGRATIONS = Path(__file__).parent / "migrations"
 _MIGRATION_NAME = re.compile(r"^(\d+)_.*\.sql$")
@@ -76,6 +87,24 @@ class EventLog:
             f"SELECT * FROM events WHERE type IN ({marks}) ORDER BY seq",  # noqa: S608 - placeholders only
             types,
         ).fetchall()
+
+    def replay(self, since_ts_ns: int = 0) -> list[Envelope]:
+        """Rebuild stored events with ts_ns >= since_ts_ns; unknown types skipped."""
+        out: list[Envelope] = []
+        query = "SELECT * FROM events WHERE ts_ns >= ? ORDER BY seq"
+        for row in self._db.execute(query, (since_ts_ns,)):
+            data: dict[str, Any] = {
+                k: row[k] for k in row.keys() if k not in ("payload", "content")
+            }  # noqa: SIM118 - sqlite3.Row
+            data.update(json.loads(row["payload"]))
+            field = _CONTENT_FIELDS.get(row["type"])
+            if field:
+                data[field] = row["content"]
+            try:
+                out.append(_EVENT.validate_python(data))
+            except ValidationError:
+                continue
+        return out
 
     def last_seq(self) -> int:
         row = self._db.execute("SELECT COALESCE(MAX(seq), 0) FROM events").fetchone()
