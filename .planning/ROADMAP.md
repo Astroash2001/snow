@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log
   5. Every change to Snow's repository runs typed, linted, tested CI, and a failing change cannot be merged
 
-**Plans:** 2/33 plans executed
+**Plans:** 5/33 plans executed
 
 Plans:
 **Wave 1**
@@ -43,9 +43,9 @@ Plans:
 - [x] 01-02-PLAN.md — Package legitimacy gate (human): pocket-tts, moonshine-voice, chatterbox-tts, livekit-wakeword
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-03-PLAN.md — Walking skeleton B: settings, keyring secrets, HubClient, brain answers through the first fast provider
-- [ ] 01-04-PLAN.md — Full event catalog, snapshot projection, mute persistence, role matrix, JSON Schema and golden samples
-- [ ] 01-05-PLAN.md — Synthetic speech fixtures (wake, pauses, commands, tone) with a wake-score check
+- [x] 01-03-PLAN.md — Walking skeleton B: settings, keyring secrets, HubClient, brain answers through the first fast provider
+- [x] 01-04-PLAN.md — Full event catalog, snapshot projection, mute persistence, role matrix, JSON Schema and golden samples
+- [x] 01-05-PLAN.md — Synthetic speech fixtures (wake, pauses, commands, tone) with a wake-score check
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-06-PLAN.md — Walking skeleton C: `snow` CLI, hub entry with scrubbed worker launch, `snow run` and `snow dev say`
@@ -241,7 +241,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Always-On Voice Loop | 2/33 | In Progress | - |
+| 1. Always-On Voice Loop | 5/33 | In Progress | - |
 | 2. Voice-Driven Claude Code with Safety Gate | 0/TBD | Not started | - |
 | 3. Steerable and Reviewable Agent Work | 0/TBD | Not started | - |
 | 4. Hand-off & Phone | 0/TBD | Not started | - |
