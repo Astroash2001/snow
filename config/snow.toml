@@ -1,0 +1,19 @@
+# Hub settings and the worker table. `{python}` expands to the interpreter running the hub;
+# a command whose first item has a path separator and is relative resolves from the repo root.
+# Workers for modules not built yet exit or fail to launch and are logged, never fatal.
+
+[hub]
+allowed_origins = ["http://localhost:5173"]
+retention_days = 30
+
+[workers.brain]
+command = ["{python}", "-m", "snow.brain"]
+enabled = true
+
+[workers.voice]
+command = ["{python}", "-m", "snow.voice"]
+enabled = true
+
+[workers.hud]
+command = ["hud/node_modules/electron/dist/electron.exe", "hud"]
+enabled = true
