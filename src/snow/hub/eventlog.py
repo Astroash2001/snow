@@ -121,5 +121,13 @@ class EventLog:
             (key, value),
         )
 
+    def purge_content(self, older_than_ns: int) -> int:
+        """Erase speech text older than the cutoff; event metadata stays (D-19)."""
+        cur = self._db.execute(
+            "UPDATE events SET content = NULL WHERE content IS NOT NULL AND ts_ns < ?",
+            (older_than_ns,),
+        )
+        return cur.rowcount
+
     def close(self) -> None:
         self._db.close()

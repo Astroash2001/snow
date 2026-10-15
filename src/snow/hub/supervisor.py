@@ -29,7 +29,6 @@ from snow.contracts.events import (
     WorkerStarted,
 )
 from snow.hub.jobobject import JobHandle, assign
-from snow.hub.projections import RESTARTING_DETAIL
 
 log = logging.getLogger("snow.hub.supervisor")
 
@@ -42,6 +41,8 @@ BREAKER_EXITS = 5
 BREAKER_WINDOW_S = 120.0
 BREAKER_RETRY_S = 60.0
 BREAKER_DETAIL = "Could not restart. See logs."
+# Same words the projection puts on a dead worker's component rows (test-guarded).
+RESTARTING_DETAIL = "Snow is restarting it automatically."
 TICK_S = 0.25
 STOP_WAIT_S = 5.0
 

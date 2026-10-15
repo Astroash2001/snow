@@ -240,3 +240,28 @@ async def test_autostart_flag_reaches_the_hud_worker_only_when_given(
         await asyncio.sleep(0.1)
     first_launch = json.loads(out.read_text("utf-8").splitlines()[0])
     assert first_launch == expected
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="PowerShell scripts are Windows-only"
+)
+@pytest.mark.parametrize("command", ["install-autostart", "uninstall-autostart"])
+def test_generated_script_is_valid_powershell(
+    command: str, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """Parse only, never execute: a syntax slip would surface at install time."""
+    script = tmp_path / "task.ps1"
+    script.write_text(_print_script(command, capsys), encoding="utf-8")
+    check = (
+        "$e = $null; "
+        "[void][System.Management.Automation.Language.Parser]::ParseFile("
+        f"'{script}', [ref]$null, [ref]$e); "
+        "if ($e.Count) { $e | ForEach-Object { $_.Message }; exit 1 }"
+    )
+    result = subprocess.run(  # noqa: S603
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", check],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

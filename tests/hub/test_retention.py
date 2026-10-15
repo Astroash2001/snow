@@ -84,7 +84,7 @@ async def test_a_starting_hub_purges_old_transcripts(snow_dirs: SnowDirs) -> Non
         "[hub]\nallowed_origins = []\nretention_days = 30\n", encoding="utf-8"
     )
     env = {**os.environ, "SNOW_HUB_MUTEX": f"Local\\SnowHubTest{uuid.uuid4().hex}"}
-    hub = subprocess.Popen(  # noqa: S603
+    hub = subprocess.Popen(  # noqa: S603, ASYNC220
         [sys.executable, "-m", "snow.hub"], env=env, stdout=subprocess.DEVNULL
     )
     try:

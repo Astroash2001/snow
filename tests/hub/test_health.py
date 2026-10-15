@@ -8,6 +8,7 @@ import pytest
 
 from snow.contracts.events import HealthSubsystem, MuteChanged, WorkerExited
 from snow.contracts.wire import Snapshot
+from snow.hub import projections, supervisor
 from snow.hub.projections import Projection
 from tests.conftest import HubHandle
 
@@ -77,3 +78,7 @@ async def test_event_log_row_goes_down_when_an_append_raises_and_recovers(
     hub.hub.publish(event)
     row = _by_name(hub.hub._projection.snapshot())["event_log"]  # noqa: SLF001
     assert row.status == "running"
+
+
+def test_supervisor_and_projection_use_the_same_restarting_words() -> None:
+    assert supervisor.RESTARTING_DETAIL == projections.RESTARTING_DETAIL
