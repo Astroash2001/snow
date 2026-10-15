@@ -47,6 +47,14 @@ def logs(snow_dirs: SnowDirs) -> Iterator[Path]:
     loguru_logger.remove()
 
 
+def _read_all(root: Path, pattern: str) -> str:
+    return "\n".join(
+        p.read_text(encoding="utf-8", errors="replace")
+        for p in sorted(root.glob(pattern))
+        if p.is_file()
+    )
+
+
 def _two_trusted_fast_entries(config: Path) -> None:
     toml = config / "models.toml"
     text = toml.read_text(encoding="utf-8")
@@ -125,13 +133,9 @@ async def test_canary_and_spoken_text_never_leak(
     except RuntimeError:
         careless.exception("provider failed")
 
-    log_text = "".join(
-        p.read_text(encoding="utf-8") for p in sorted(logs.glob("canary.log*"))
-    )
+    log_text = _read_all(logs, "canary.log*")
     assert "llm_failed" in log_text  # the logger really was wired into the turn
-    row_text = "\n".join(
-        " | ".join(str(c) for c in tuple(r)) for r in hub.log.rows()
-    )
+    row_text = "\n".join(" | ".join(str(c) for c in tuple(r)) for r in hub.log.rows())
     config_text = "\n".join(
         p.read_text(encoding="utf-8", errors="replace")
         for p in snow_dirs.config.rglob("*")
