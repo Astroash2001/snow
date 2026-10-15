@@ -35,11 +35,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log
   5. Every change to Snow's repository runs typed, linted, tested CI, and a failing change cannot be merged
 
-**Plans:** 33 plans
+**Plans:** 1/33 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — Walking skeleton A: uv project and pins, typed event contract, hub with SQLite event log and loopback WebSocket
+- [x] 01-01-PLAN.md — Walking skeleton A: uv project and pins, typed event contract, hub with SQLite event log and loopback WebSocket
 - [ ] 01-02-PLAN.md — Package legitimacy gate (human): pocket-tts, moonshine-voice, chatterbox-tts, livekit-wakeword
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -241,7 +241,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Always-On Voice Loop | 0/33 | Planned | - |
+| 1. Always-On Voice Loop | 1/33 | In Progress | - |
 | 2. Voice-Driven Claude Code with Safety Gate | 0/TBD | Not started | - |
 | 3. Steerable and Reviewable Agent Work | 0/TBD | Not started | - |
 | 4. Hand-off & Phone | 0/TBD | Not started | - |
