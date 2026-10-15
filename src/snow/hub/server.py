@@ -12,8 +12,10 @@ import json
 import logging
 import os
 import secrets
+import sqlite3
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
@@ -23,7 +25,13 @@ from websockets.asyncio.server import Server, ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request, Response
 
-from snow.contracts.events import Event, MuteChanged, TranscriptFinal
+from snow.contracts.events import (
+    Event,
+    HealthSubsystem,
+    Heartbeat,
+    MuteChanged,
+    TranscriptFinal,
+)
 from snow.contracts.wire import (
     COMMAND_ROLES,
     AppQuit,
@@ -81,6 +89,12 @@ class Hub:
         self._clients: set[_Client] = set()
         self._closing: set[asyncio.Task[None]] = set()
         self._projection = Projection()
+        # Last sign of life per role (monotonic seconds): a hello or a heartbeat.
+        # The supervisor reads this to tell running from hung (CORE-02).
+        self.heartbeats: dict[str, float] = {}
+        self.quit_requested = asyncio.Event()
+        self.on_kill: Callable[[str], object] | None = None
+        self._log_down = False
         # Rebuild today's view from the durable log; the persisted mute wins (D-10).
         for event in event_log.replay(local_midnight_ns(time.time_ns())):
             self._projection.apply(event)
@@ -141,6 +155,7 @@ class Hub:
         # in the gap between the snapshot and the live stream.
         client.queue.put_nowait(self._snapshot_json())
         self._clients.add(client)
+        self.heartbeats[client.role] = time.monotonic()
         writer = asyncio.create_task(self._writer(client))
         try:
             async for raw in ws:
@@ -186,7 +201,9 @@ class Hub:
             if msg.event.source != client.role:
                 await client.ws.close(CLOSE_INVALID, "source must equal role")
                 return False
-            self._publish(msg.event)
+            if isinstance(msg.event, Heartbeat):
+                self.heartbeats[client.role] = time.monotonic()
+            self.publish(msg.event)
         elif isinstance(msg, CommandMsg):
             if client.role not in COMMAND_ROLES[msg.command.type]:
                 await client.ws.close(CLOSE_FORBIDDEN, "command not allowed for role")
@@ -209,7 +226,7 @@ class Hub:
                 client.queue.put_nowait(self._snapshot_json())
             case DevSay():
                 # D-07: developer-only test input standing in for speech.
-                self._publish(
+                self.publish(
                     TranscriptFinal(
                         ts_ns=time.time_ns(),
                         source="dev",
@@ -219,9 +236,13 @@ class Hub:
                         stt_source="dev",
                     )
                 )
-            case AppQuit() | DevKill():
-                # Accepted and logged here; acted on by the supervisor (plan 01-14).
-                log.info("command accepted: %s from %s", cmd.type, client.role)
+            case AppQuit():
+                log.info("quit requested by %s", client.role)
+                self.quit_requested.set()
+            case DevKill():
+                log.info("dev kill %s", cmd.worker)
+                if self.on_kill is not None:
+                    self.on_kill(cmd.worker)
 
     def _on_mute_set(self, cmd: MuteSet) -> None:
         voice = next((c for c in self._clients if c.role == "voice"), None)
@@ -230,20 +251,44 @@ class Hub:
             self._send(voice, CommandMsg(command=cmd).model_dump_json())
             return
         # No voice worker: the mic is already closed, so the hub records the change.
-        self._publish(
+        self.publish(
             MuteChanged(ts_ns=time.time_ns(), source="hub", muted=cmd.muted, by=cmd.by)
         )
 
-    def _publish(self, event: Event) -> None:
+    def publish(self, event: Event) -> None:
         """Persist durable events (assigning seq), project, then broadcast to all."""
         if event.durable:
-            event = event.model_copy(update={"seq": self._log.append(event)})
+            try:
+                event = event.model_copy(update={"seq": self._log.append(event)})
+            except sqlite3.Error as e:
+                # Keep Snow alive and visible: show the log as down, broadcast unsaved.
+                log.error("event_log_append_failed kind=%s", type(e).__name__)
+                self.report_event_log(down=True)
         if isinstance(event, MuteChanged):
             self._log.set_state("mute", "1" if event.muted else "0")
         self._projection.apply(event)
         text = EventMsg(event=event).model_dump_json()
         for client in list(self._clients):
             self._send(client, text)
+        if self._log_down and event.seq is not None:
+            self.report_event_log(down=False)  # a write worked again
+
+    def report_event_log(self, *, down: bool = False) -> None:
+        """Publish the Event log health row; the entry point calls it once open."""
+        if down and self._log_down:
+            return  # already reported; also stops the health event recursing
+        self._log_down = down
+        self.publish(
+            HealthSubsystem(
+                ts_ns=time.time_ns(),
+                source="hub",
+                name="event_log",
+                label="Event log",
+                owner="hub",
+                status="down" if down else "running",
+                detail="Could not save events. See logs." if down else None,
+            )
+        )
 
     def _send(self, client: _Client, text: str) -> None:
         try:
