@@ -4,6 +4,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from snow.brain.limits import CooldownDefaults
+
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -34,6 +36,7 @@ class Role(_Strict):
 class ModelsConfig(_Strict):
     providers: dict[str, Provider]
     roles: dict[Literal["brain", "fast", "vision"], Role]
+    limits: CooldownDefaults = CooldownDefaults()  # optional [limits] table
 
     @model_validator(mode="after")
     def _chains_use_known_providers(self) -> Self:

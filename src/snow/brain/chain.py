@@ -13,6 +13,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 from openai import (
@@ -26,6 +27,7 @@ from openai import (
 from openai.types.chat import ChatCompletionChunk, ChatCompletionMessageParam
 
 from snow.brain.config import ChainEntry, ModelsConfig, Provider, Role
+from snow.brain.limits import RateLimiter
 from snow.config.secrets import Secret
 from snow.contracts.events import (
     ChainEntryStatus,
@@ -68,6 +70,10 @@ _QUOTA_CODES = frozenset(
     }
 )
 _LIMIT_REASONS = frozenset({"rate_limit", "out_of_quota"})
+
+
+def _ns(when: datetime) -> int:
+    return int(when.timestamp() * 1_000_000_000)
 
 
 class AllProvidersFailed(Exception):
@@ -173,6 +179,7 @@ class LLMChain:
         now: Callable[[], float] = time.monotonic,
         client_factory: ClientFactory = AsyncOpenAI,
         board: ProviderBoard | None = None,
+        limiter: RateLimiter | None = None,
     ) -> None:
         self._models = models
         self._role_name: LlmRole = role
@@ -182,7 +189,8 @@ class LLMChain:
         self._now = now
         self._client_factory = client_factory
         self._board: ProviderBoard = board if board is not None else {}
-        self._sent_board: dict[str, tuple[ProviderStatus, str | None]] = {}
+        self._limiter = limiter
+        self._sent_board: dict[str, tuple[object, ...]] = {}
         self._clients: dict[str, tuple[str, str, AsyncOpenAI]] = {}
         self._switch_notice: LlmSwitch | None = None
 
@@ -207,6 +215,8 @@ class LLMChain:
             if data_class == "private" and provider.trust == "untrusted":
                 blocked.add(index)  # SAFE-12: never send private data here
                 continue
+            if self._limiter and self._limiter.cooling_until(entry.provider, entry):
+                continue  # after the privacy check: cooling never promotes untrusted
             started = self._now()
             try:
                 opened = await self._open(entry, provider, secret, messages, max_tokens)
@@ -228,7 +238,7 @@ class LLMChain:
                     error_kind=reason,
                     total_ms=self._ms(started),
                 )
-                self._board[entry.provider] = ("failing", reason)
+                self._board[entry.provider] = self._record_failure(entry, reason, e)
                 continue
             raw_stream, first_text, headers = opened
             ttft_ms = self._ms(started)
@@ -295,6 +305,19 @@ class LLMChain:
     def _ms(self, since: float) -> int:
         return round((self._now() - since) * 1000)
 
+    def _record_failure(
+        self, entry: ChainEntry, reason: SwitchReason, exc: BaseException
+    ) -> tuple[ProviderStatus, str | None]:
+        """Start the provider's cooldown from the error's headers and body (CORE-09)."""
+        if self._limiter is None:
+            return "failing", reason
+        headers: Mapping[str, str] = {}
+        body: object = None
+        if isinstance(exc, APIStatusError):
+            headers, body = exc.response.headers, exc.body
+        until = self._limiter.record_failure(entry.provider, reason, headers, body)
+        return ("cooling_down" if until else "failing"), reason
+
     def _client(self, name: str, provider: Provider, secret: Secret) -> AsyncOpenAI:
         cached = self._clients.get(name)
         if cached and cached[:2] == (provider.base_url, secret.reveal()):
@@ -356,6 +379,7 @@ class LLMChain:
     ) -> AsyncIterator[str]:
         usage_in: int | None = None
         usage_out: int | None = None
+        text_len = len(first_text)
         outcome: Literal["ok", "error", "cancelled"] = "cancelled"
         error_kind: str | None = None
         try:
@@ -366,6 +390,7 @@ class LLMChain:
                     usage_out = chunk.usage.completion_tokens
                 text = chunk.choices[0].delta.content if chunk.choices else None
                 if text:
+                    text_len += len(text)
                     yield text
             outcome = "ok"
         except (OpenAIError, TimeoutError) as e:
@@ -384,6 +409,14 @@ class LLMChain:
                 prompt_tokens=usage_in,
                 completion_tokens=usage_out,
             )
+            if self._limiter:  # a served request counts even if cut short
+                tokens = (
+                    usage_in + usage_out
+                    if usage_in is not None and usage_out is not None
+                    else None
+                )
+                self._limiter.record_success(entry.provider, entry, tokens, text_len)
+                await self._publish_providers()
 
     async def _emit_call(
         self,
@@ -435,6 +468,13 @@ class LLMChain:
             self._switch_notice = switch
         await self._emit(switch)
 
+    def _cooling(self, entry: ChainEntry) -> datetime | None:
+        return (
+            self._limiter.cooling_until(entry.provider, entry)
+            if self._limiter
+            else None
+        )
+
     def _entry_status(
         self,
         index: int,
@@ -446,6 +486,7 @@ class LLMChain:
         provider = self._models.providers[entry.provider]
         status: ProviderStatus = "ready"
         detail: str | None = None
+        cooling_ns: int | None = None
         if self._get_secret(provider.key_name) is None:
             status, detail = "not_configured", "No key stored"
         elif not entry.model:
@@ -453,15 +494,18 @@ class LLMChain:
             detail = "Model ID not resolved; run snow dev probe-models"
         elif index in blocked:
             detail = "Skipped: private data stays off untrusted providers"
-        elif index in failed:
-            status, detail = "failing", failed[index]
         elif index == served:
             status = "active"
+        elif until := self._cooling(entry):
+            status, cooling_ns, detail = "cooling_down", _ns(until), failed.get(index)
+        elif index in failed:
+            status, detail = "failing", failed[index]
         return ChainEntryStatus(
             provider=entry.provider,
             provider_label=provider.label,
             model=entry.model,
             status=status,
+            cooling_until_ns=cooling_ns,
             detail=detail,
         )
 
@@ -480,14 +524,21 @@ class LLMChain:
             for i, e in enumerate(chain)
         ]
         status: Literal[
-            "active", "fallback", "failing", "not_configured", "not_used_yet"
+            "active",
+            "fallback",
+            "cooling_down",
+            "failing",
+            "not_configured",
+            "not_used_yet",
         ]
         if all(e.status == "not_configured" for e in entries):
             status = "not_configured"
         elif served is not None:
             status = "active" if served == 0 else "fallback"
         elif used:
-            status = "failing"
+            cooling = any(e.status == "cooling_down" for e in entries)
+            failing = any(e.status == "failing" for e in entries)
+            status = "cooling_down" if cooling and not failing else "failing"
         else:
             status = "not_used_yet"
         entry = chain[served] if served is not None else None
@@ -503,10 +554,25 @@ class LLMChain:
                 entries=entries,
             )
         )
+        await self._publish_providers()
+
+    async def _publish_providers(self) -> None:
+        """Provider rows on change: status, cooldown end and today's counters."""
         for name, (pstatus, detail) in self._board.items():
-            if self._sent_board.get(name) == (pstatus, detail):
+            entry = next((e for e in self._role.chain if e.provider == name), None)
+            requests = tokens = 0
+            until: datetime | None = None
+            if self._limiter and entry:
+                requests, tokens, until = self._limiter.snapshot(name)
+            if pstatus == "cooling_down" and until is None:
+                pstatus = "ready"  # cooldown over; the next call retries it
+            elif until is not None:
+                pstatus = "cooling_down"
+            cooling_ns = _ns(until) if until else None
+            row = (pstatus, detail, requests, tokens, cooling_ns)
+            if self._sent_board.get(name) == row:
                 continue
-            self._sent_board[name] = (pstatus, detail)
+            self._sent_board[name] = row
             await self._emit(
                 HealthProvider(
                     ts_ns=time.time_ns(),
@@ -514,6 +580,9 @@ class LLMChain:
                     provider=name,
                     label=self._models.providers[name].label,
                     status=pstatus,
+                    cooling_until_ns=cooling_ns,
                     detail=detail,
+                    requests_today=requests,
+                    tokens_today=tokens,
                 )
             )
