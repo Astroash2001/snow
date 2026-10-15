@@ -1,98 +1,129 @@
-"""Brain worker: answers each transcript.final via the first usable `fast` provider.
+"""Brain worker: answers each transcript.final through the `fast` role's LLM chain.
 
-Provider, base URL and model come only from config/models.toml (CORE-04). The key is
-read from Credential Manager at call time and never stored (SAFE-09). Plan 01-08 adds
-the fallback chain and durable error events.
+Providers, base URLs, models and fallback order come only from config/models.toml
+(CORE-04). Keys are read from Credential Manager by the chain at call time (SAFE-09).
+Conversation turns are personal data, so every call is `data_class="private"` and the
+chain never lets them reach an untrusted provider (SAFE-12, D-41).
 """
 
 import logging
 import time
 from collections.abc import Awaitable, Callable
 
-from openai import AsyncOpenAI, OpenAIError
+from openai import AsyncOpenAI
 
-from snow.brain.config import ChainEntry, ModelsConfig, PersonaConfig, Provider
-from snow.config.secrets import Secret, get_secret
+from snow.brain.chain import (
+    AllProvidersFailed,
+    ClientFactory,
+    LLMChain,
+    MidStreamError,
+    PrivacyBlockedError,
+    ProviderBoard,
+    Trace,
+)
+from snow.brain.config import ModelsConfig, PersonaConfig
+from snow.config.secrets import get_secret
 from snow.config.settings import load_config
-from snow.contracts.events import Event, ReplyDelta, ReplyFinal, TranscriptFinal
+from snow.contracts.events import (
+    Event,
+    LlmRole,
+    ReplyDelta,
+    ReplyFinal,
+    TranscriptFinal,
+)
+from snow.contracts.wire import Snapshot
 
 log = logging.getLogger("snow.brain")
 
 Publish = Callable[[Event], Awaitable[None]]
+ROLES: tuple[LlmRole, ...] = ("brain", "fast", "vision")
 
 
-def _pick(models: ModelsConfig) -> tuple[ChainEntry, Provider, Secret] | None:
-    role = models.roles.get("fast")
-    for entry in role.chain if role else []:
-        provider = models.providers[entry.provider]
-        secret = get_secret(provider.key_name)
-        if secret is not None:
-            return entry, provider, secret
-    return None
+def _default_factory(**kwargs: object) -> AsyncOpenAI:
+    # Looked up at call time so tests can swap `snow.brain.worker.AsyncOpenAI`.
+    return AsyncOpenAI(**kwargs)  # pyright: ignore[reportArgumentType]
 
 
 class BrainWorker:
-    def __init__(self, publish: Publish) -> None:
+    def __init__(
+        self, publish: Publish, *, client_factory: ClientFactory = _default_factory
+    ) -> None:
         self._publish = publish
+        self._client_factory = client_factory
+        self._models: ModelsConfig | None = None
+        self._chains: dict[LlmRole, LLMChain] = {}
+
+    async def _chain(self, models: ModelsConfig, role: LlmRole) -> LLMChain:
+        # Config is re-read every turn; chains are rebuilt only when it changed.
+        if models != self._models:
+            for old in self._chains.values():
+                await old.aclose()
+            board: ProviderBoard = {}
+            self._chains = {
+                r: LLMChain(
+                    models,
+                    r,
+                    get_secret=get_secret,
+                    emit=self._publish,
+                    client_factory=self._client_factory,
+                    board=board,
+                )
+                for r in ROLES
+            }
+            self._models = models
+        return self._chains[role]
+
+    async def on_snapshot(self, _snapshot: Snapshot) -> None:
+        """(Re)connected to a hub: publish provider and role health rows (D-28)."""
+        try:
+            models = load_config("models.toml", ModelsConfig)
+        except (OSError, ValueError) as e:
+            log.error("config_error kind=%s", type(e).__name__)
+            return
+        for role in ROLES:
+            await (await self._chain(models, role)).announce(force=True)
 
     async def on_event(self, event: Event) -> None:
         if isinstance(event, TranscriptFinal):
             await self._answer(event)
 
     async def _answer(self, heard: TranscriptFinal) -> None:
-        # Config is re-read every turn so a models.toml edit applies with no restart.
         try:
             models = load_config("models.toml", ModelsConfig)
             persona = load_config("persona.toml", PersonaConfig)
         except (OSError, ValueError) as e:
             log.error("config_error kind=%s", type(e).__name__)
             return
-        picked = _pick(models)
-        if picked is None:
-            log.error("no_provider_key")
-            return
-        entry, provider, secret = picked
+        chain = await self._chain(models, "fast")
         cid, tid, cause = heard.correlation_id, heard.turn_id, heard.seq
+        try:
+            stream = await chain.stream(
+                [
+                    {"role": "system", "content": persona.system_prompt},
+                    {"role": "user", "content": heard.text},
+                ],
+                data_class="private",
+                trace=Trace(cid, tid, cause),
+            )
+        except (AllProvidersFailed, PrivacyBlockedError):
+            # No reply: llm.exhausted / llm.blocked_privacy tell the HUD why.
+            return
         text = ""
         try:
-            async with AsyncOpenAI(
-                base_url=provider.base_url,
-                api_key=secret.reveal(),
-                max_retries=0,  # SDK retries would delay failover (research F6)
-                timeout=30,
-            ) as client:
-                stream = await client.chat.completions.create(
-                    model=entry.model,
-                    messages=[
-                        {"role": "system", "content": persona.system_prompt},
-                        {"role": "user", "content": heard.text},
-                    ],
-                    stream=True,
-                    extra_body={
-                        k: v
-                        for k, v in entry.params.items()
-                        if k not in entry.drop_params
-                    },
+            async for delta in stream:
+                text += delta
+                await self._publish(
+                    ReplyDelta(
+                        ts_ns=time.time_ns(),
+                        source="brain",
+                        correlation_id=cid,
+                        turn_id=tid,
+                        causation_id=cause,
+                        text=delta,
+                    )
                 )
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta.content if chunk.choices else None
-                    if delta:
-                        text += delta
-                        await self._publish(
-                            ReplyDelta(
-                                ts_ns=time.time_ns(),
-                                source="brain",
-                                correlation_id=cid,
-                                turn_id=tid,
-                                causation_id=cause,
-                                text=delta,
-                            )
-                        )
-        except OpenAIError as e:
-            log.error("llm_error kind=%s provider=%s", type(e).__name__, entry.provider)
-            if not text:
-                # Failed before the first token: no reply.final (plan 01-08 records it).
-                return
+        except MidStreamError:
+            log.error("llm_midstream_error provider=%s", stream.provider)
         await self._publish(
             ReplyFinal(
                 ts_ns=time.time_ns(),
@@ -101,8 +132,8 @@ class BrainWorker:
                 emotion="neutral",
                 big_moment=False,
                 reply_source="llm",
-                provider=entry.provider,
-                model=entry.model,
+                provider=stream.provider,
+                model=stream.model,
                 correlation_id=cid,
                 turn_id=tid,
                 causation_id=cause,
