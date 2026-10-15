@@ -76,7 +76,7 @@ None yet.
 - [Phase 2/3]: Two dogfooding mechanics have no REQ-ID yet (stable running copy separate from the dev copy; self-upgrade only on approval with rollback); confirm and add before planning Phase 2
 - [Phase 2]: Claude Code account is borrowed; confirm Agent SDK headless permission behaviour and account terms
 - [Phase 5]: WhatsApp Desktop automation carries account-ban risk; confirm the target app before planning
-- [General]: Cartesia free tier is about 25 min/month; expect the local voice to carry most speech until usage is measured
+- [General]: Cartesia free tier is 20K credits/month (about 27 min, no cloning); by design (Phase 1 D-33) Pocket TTS carries everyday speech and Cartesia only big moments
 
 ## Deferred Items
 

@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-The user wakes Snow by saying "Hey Snow", talks naturally, and hears a fast, LLM-written, emotion-voiced reply in a Jarvis-like voice, with a local fallback voice when Cartesia is unavailable. Underneath: the event bus and durable event log, a supervisor that restarts crashed subsystems, autostart at Windows logon, secrets in Windows Credential Manager, config-swappable LLM roles, and typed/linted/tested CI.
+The user wakes Snow by saying "Hey Snow", talks naturally, and hears a fast, LLM-written, emotion-voiced reply in a Jarvis-like voice that responds to the user's tone. The laptop does as little heavy work as possible: speech-to-text runs on Groq's cloud, everyday speech is a light CPU voice, and Cartesia is kept for the big emotional moments (D-32 to D-41, revised 2026-10-15). Underneath: the event bus and durable event log, a supervisor that restarts crashed subsystems, autostart at Windows logon, secrets in Windows Credential Manager, config-swappable LLM roles, and typed/linted/tested CI.
 
 The HUD in this phase is light: a full dashboard window (presence orb, live transcript, subsystem health, mute state) and a minimized mini indicator. No coding agents, no PC control, no speaker verification (Phase 2). The ASCII orb ships in Phase 1 as a 2D glyph renderer (D-12, D-31); Phase 6 upgrades it to the full 3D shader version.
 
@@ -22,7 +22,7 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
 - **D-02:** Snow addresses the user as "sir", used naturally, the way Jarvis does.
 - **D-03:** Guardrail: sarcasm switches off when something goes wrong (errors, failures, unreachable services) or when the user sounds stressed. In those moments Snow is plain, direct and helpful.
 - **D-04:** Reply length matches the question. The LLM judges per turn: banter gets a line, a real question gets a full answer. No fixed sentence cap, but the reply must still start speaking within about 1 second (SPCH-04), so stream sentence by sentence.
-- **D-05:** Voice is a male Cartesia voice. The researcher shortlists male Cartesia voices that fit a calm, dry, British-leaning Jarvis character. The user picks the final voice in a short audition step. The voice ID lives in config.
+- **D-05 (revised 2026-10-15):** Snow has one male voice, calm, dry, British-leaning, Jarvis-like. The local engines (Pocket TTS, Chatterbox) clone it from one reference voice, so they sound the same. The reference must come from a consenting source: the user's own voice, a friend who agrees, or a licensed preset voice. It must never be a clone of the film actor or any other real person who has not agreed. Cartesia's free plan has no voice cloning, so Cartesia uses the closest stock male voice; the user picks both in a short audition step. Voice IDs and the reference clip path live in config. Who provides the reference voice is still open; until the user decides, use a licensed Pocket TTS preset voice.
 - **D-06:** Vocal emotion is natural and mostly upbeat. The LLM picks one emotion per reply from a small validated set (for example content, calm, excited, sympathetic, neutral), defaulting to warm or content, with strong emotions only when the moment calls for it. Invalid values fall back to neutral.
 
 ### Conversation flow
@@ -45,11 +45,36 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
 - **D-31:** The ASCII orb is Snow's only visual identity. A tiny rendering of the orb is also the app icon, the tray icon and Snow's avatar in the transcript. No snowflake or other logo. The rest of the interface stays clean (dark panels, modern sans-serif text, as in the reference image); only the orb is ASCII. Phase 6 upgrades the orb to the full 3D shader version (letters revealed on zoom, bloom, glyph atlas from the user's code) without changing where it appears.
 - **D-13:** Mini indicator: top-right corner by default, draggable, position remembered, click-through so it never blocks clicks on the windows below, and clicking it opens the full dashboard. It shows only the orb while idle. While in conversation, a one-line caption of what Snow heard appears next to it, then fades.
 - **D-14:** The full dashboard shows the transcript chat-style for the current conversation: the user's words updating live as they speak (VOIC-08), Snow's replies, newest at the bottom. The view clears when the conversation ends. Full history stays in the event log (the history view is Phase 6).
-- **D-15:** The full dashboard also shows subsystem health (each subsystem up or down, QUAL-03), the mute or sleep state, and which voice is active (Cartesia or local) with remaining Cartesia credits.
+- **D-15 (revised 2026-10-15):** The full dashboard also shows subsystem health (each subsystem up or down, QUAL-03), the mute or sleep state, which voice engine spoke last (Pocket TTS, Cartesia, Chatterbox or Kokoro), the remaining Cartesia credits, and the speech-to-text source (Groq cloud or local).
 
 ### Fallback voice and privacy
-- **D-16:** Use Cartesia for every reply until credits run out or Cartesia is unreachable. Then switch to the local voice (kokoro-onnx) automatically, and switch back when Cartesia works again.
-- **D-17:** On the first reply after a switch to the local voice, Snow mentions it once in an LLM-written line, in character (for example, a dry remark about its "budget voice"). The HUD always shows the active voice and the remaining credits.
+- **D-16 (superseded 2026-10-15 by D-33):** ~~Use Cartesia for every reply until credits run out, then kokoro-onnx.~~ Cartesia is now used only for big emotional moments; see D-33.
+- **D-17 (revised 2026-10-15):** When Snow loses a capability it normally has (Cartesia credits run out, speech-to-text falls back to the local model, the GPU voice is unavailable), Snow mentions it once in an LLM-written line, in character (for example, a dry remark about its "budget voice"). The HUD always shows the active voice, the speech-to-text source and the remaining credits.
+
+### Voice, tone and speech-to-text (added 2026-10-15; locked by the user)
+- **D-32:** Goal: Snow sounds emotional and human while the laptop does as little heavy processing as possible, and it stays free. The user accepted these compromises: everyday emotion is basic (a few moods) and the full emotion comes only in the big moments; the voice can shift slightly between engines; with no internet Snow hears through a weaker local model; free limits can run out on heavy days; Groq hears what the user says after the wake word. Snow's capabilities (agents, PC control, phone, memory) are not reduced by any of this.
+- **D-33:** Voice router. Each reply goes to one engine, chosen per reply:
+  1. **Pocket TTS (Kyutai) on CPU** is the everyday voice. Streaming; the project claims about 200 ms to first audio on 2 CPU cores (not yet measured here). Windows wheels pull CPU-only PyTorch.
+  2. **Cartesia `sonic-3.6`** speaks only the big emotional moments: greetings, jokes, bad news, serious warnings. The LLM marks a reply as a big moment together with its emotion (D-06). A per-day budget protects the free plan (20K credits a month, about 27 minutes of audio; 1 credit is 1 character). When credits run out or Cartesia is unreachable, the line goes to Pocket TTS.
+  3. **Chatterbox (Resemble AI) on GPU** is used only when the laptop is on mains power and the GPU is idle (enough free VRAM). Use the base model for the emotion dial (`exaggeration`); sources conflict on whether Chatterbox-Turbo supports it, so check in the spike. VRAM use is not measured.
+  4. **kokoro-onnx** is the last fallback (flat voice) if the other local engines fail to load.
+  — **Reversibility:** reversible — the router, budgets and engine order are config.
+- **D-34:** Everyday emotion with Pocket TTS comes from mood clips: 4-5 reference clips of the same voice (for example calm, upbeat, serious, playful, sympathetic). The emotion the LLM picks (D-06) selects the clip. Pocket TTS has no emotion parameter; how well a clip carries emotion is unverified and must be judged by the user in the spike.
+- **D-35:** Tone detection, local and light, so Snow responds to how the user sounds, not only the words. For every user turn, measure pitch, loudness and speaking speed, and run a small speech-emotion model on CPU. Candidates: the community `emotion2vec-web-distill` ONNX (about 2.2M parameters, 9.7 MB) or an official emotion2vec+ model; check accuracy, speed and licence in the spike. The result goes to the fast LLM as a short tag next to the transcript (for example `[user tone: stressed, fast, loud]`). The audio stays in memory and is never written to disk (D-18).
+- **D-36:** Tone stance is to balance, like Jarvis with Tony: when the user is stressed or angry, Snow stays calm, plain and brief (this extends D-03); when the user is upbeat, Snow matches the energy; reply length and pace follow the user's pace (quick user, short reply). Chosen by Claude as the default; the user can change it.
+- **D-37:** Speech-to-text runs on Groq's cloud Whisper (`whisper-large-v3-turbo`) through the same `gsk_` key, one request per finished turn. The Groq rate-limits page lists 20 requests a minute, 2,000 a day, 7,200 audio seconds an hour and 28,800 a day for this model; confirm in the user's account during the spike. Only audio from an active conversation (after the wake word) is sent. Wake detection stays local, and no idle audio leaves the PC (VOIC-01). The user approved Groq hearing these turns. faster-whisper on the GPU is not used in Phase 1. — **Reversibility:** reversible — the speech-to-text source is config.
+- **D-38:** A local CPU speech-to-text model (Moonshine, English, streaming) does two jobs: it shows the user's words live on the HUD while they speak (VOIC-08), because Groq returns text only after the turn ends; and it is the full fallback when Groq is unreachable, rate-limited or offline.
+- **D-39:** What runs on the laptop in normal use: wake word, voice activity and turn detection, tone detection, Moonshine live words and Pocket TTS, all on CPU. The GPU is used only by Chatterbox when D-33 allows it.
+
+### Defaults set by Claude when the user said "move ahead" (2026-10-15; each is reversible config or convention)
+- **D-40:** Process topology follows the research recommendation: one small hub process (event bus, SQLite log, WebSocket server, supervisor, health) plus `voice` and `brain` worker processes plus the Electron HUD, all in one Windows Job Object; Task Scheduler restarts the hub. This deviates from the single `snow-core` sketch in CLAUDE.md so that CORE-02 can be tested honestly.
+- **D-41:** Open research questions resolved by default:
+  - Disk: C: now has 58.5 GB free, so the disk blocker (research F1) is closed.
+  - Repo: no GitHub remote yet. Default is a private repo; "cannot merge when checks fail" is enforced by CI plus a local pre-push hook, because GitHub Free does not enforce required checks on private repos. The user can make the repo public later to get enforced branch protection.
+  - Trust: the user's own privacy rule (D-26) excludes only Google AI Studio free and OpenRouter free. Groq, NVIDIA NIM and Experiential Labs are trusted. Conversation turns default to the personal data class.
+  - "Hey Snow" wake model: Claude prepares a pinned training recipe (livekit-wakeword or openWakeWord, Colab or another cloud GPU); the user runs it as a human-action checkpoint. Until then the pretrained `hey_jarvis` model is a stand-in for development only.
+  - When every LLM provider is down and the acknowledgement pool is empty, Snow may speak a one-word plain fallback (for example "Sir?") tagged `source=fallback` (SPCH-01 allows this only when the LLM is down).
+  - Cartesia key: if none is stored, Cartesia is skipped (same rule as D-25) and big moments use Pocket TTS.
 - **D-18:** The event log stores text transcripts (what the user said, what Snow replied) plus event metadata. Raw audio is never written to disk by the conversation pipeline. — **Reversibility:** reversible going forward — audio not saved is gone, but the setting can change for future turns.
 - **D-19:** Transcripts are kept 30 days, then deleted automatically. The retention period is configurable.
 
@@ -111,6 +136,12 @@ Requirements: CORE-01..04, VOIC-01, VOIC-03..06, VOIC-08, SPCH-01..04, HUD-03, Q
 - Google AI Studio OpenAI compatibility: https://ai.google.dev/gemini-api/docs/openai
 - NVIDIA NIM API catalog: https://build.nvidia.com
 - OpenRouter API and free-model limits: https://openrouter.ai/docs
+- Groq speech-to-text and its rate limits: https://console.groq.com/docs/speech-to-text and https://console.groq.com/docs/rate-limits
+- Pocket TTS (Kyutai): https://github.com/kyutai-labs/pocket-tts (code MIT; check the weights and preset-voice licences on Hugging Face)
+- Chatterbox (Resemble AI): https://github.com/resemble-ai/chatterbox and https://huggingface.co/ResembleAI/chatterbox-turbo
+- Cartesia free plan: https://cartesia.ai/pricing (20K credits a month, no voice cloning on Free)
+- Moonshine streaming speech-to-text: https://github.com/moonshine-ai/moonshine
+- Small speech-emotion model candidate: https://huggingface.co/thomashallock/emotion2vec-web-distill
 
 </canonical_refs>
 

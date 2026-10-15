@@ -12,10 +12,10 @@ Snow is an always-on, Jarvis-style personal AI that runs on the user's Windows l
 
 - **Budget:** free for now — runs on free provider tiers and gateway credits; the user plans to pay for an API later — so the LLM layer must be swappable by configuration, not code
 - **Provider independence:** no hard dependency on Claude, the Claude app, or any single account/provider — agent and model access come and go
-- **Hardware:** 6 GB VRAM — local models limited to small ones (wake word, speech-to-text, speaker verification); large LLMs stay remote
+- **Hardware:** 6 GB VRAM — the laptop should do as little heavy work as possible; local models limited to small CPU ones (wake word, live speech-to-text, tone detection, everyday voice, speaker verification); large LLMs stay remote
 - **Platform:** Windows 11 primary host; Android for mobile
-- **Voice:** Cartesia TTS (free tier credits) with a local fallback voice when credits run out
-- **Speech-to-text:** local (faster-whisper on GPU) for privacy and cost
+- **Voice (revised 2026-10-15):** Pocket TTS on CPU is the everyday voice; Cartesia (free credits) speaks only big emotional moments; Chatterbox on GPU only when on mains power and the GPU is idle; kokoro-onnx last fallback. Snow detects the user's tone locally and answers in kind (Phase 1 context D-32 to D-39)
+- **Speech-to-text (revised 2026-10-15):** Groq cloud Whisper (`whisper-large-v3-turbo`) for final transcripts, approved by the user; local Moonshine on CPU for live words and offline fallback. Wake detection stays local; no idle audio leaves the PC
 - **Wake word:** local (openWakeWord, trainable on "Hey Snow")
 - **Latency:** HUD feedback < 100 ms; spoken reply starts in roughly 1 second or Snow stops feeling human
 - **Security:** voice + always-on + remote access + full permissions is a high-risk combination — speaker verification, approval tiers, authenticated tunnel and secret isolation are mandatory, not optional
@@ -33,6 +33,7 @@ Snow is an always-on, Jarvis-style personal AI that runs on the user's Windows l
 
 - **Shell:** Electron is the v1 HUD shell, not Tauri. The Python 3.12 core and the TS/React HUD talk over a loopback WebSocket. Ignore the Tauri, Rust and MSVC install steps below unless the user later reopens this decision.
 - **LLM layer (updated 2026-10-14):** per-role fallback chains across five OpenAI-compatible providers, all called with the plain `openai` SDK and `base_url` (never litellm): Experiential Labs `https://api.experientiallabs.ai/v1`, Groq `https://api.groq.com/openai/v1`, Google AI Studio `https://generativelanguage.googleapis.com/v1beta/openai/`, NVIDIA NIM `https://integrate.api.nvidia.com/v1`, OpenRouter `https://openrouter.ai/api/v1` (free models only). Roles: **brain** = luna, then Gemini Flash, then NIM DeepSeek V4 Pro / Kimi K3, then OpenRouter Nemotron 3 Super free; **fast** = Groq `openai/gpt-oss-120b`, then Groq Qwen3.8 27B, then `deepseek-v4-flash`, then an OpenRouter free model (primary confirmed by a Phase 1 latency test); **vision** = luna, then Gemini Flash, then `qwen3.8-27b`. Keys only in Windows Credential Manager (no `.env`). Code and personal data never go to Google AI Studio free or OpenRouter free. Per-model quirks in config (`gpt-5.6-luna` rejects `temperature`). Full decision: `.planning/phases/01-always-on-voice-loop/01-CONTEXT.md` D-20 to D-30.
+- **Voice stack (updated 2026-10-15):** least laptop load with emotion. Speech-to-text = Groq Whisper (cloud) + Moonshine (local live words and fallback); voice = Pocket TTS everyday, Cartesia for big moments, Chatterbox only when plugged in and GPU idle, Kokoro last. faster-whisper is not used in Phase 1. Full decision: Phase 1 context D-32 to D-41.
 - **Dogfooding:** from Phase 2, Snow drives Claude Code to build Snow. Snow runs from a pinned copy and never edits its running copy (CORE-06). Self-upgrade happens only on user approval, with rollback (CORE-07).
 
 ## Recommended Stack

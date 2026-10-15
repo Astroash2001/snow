@@ -121,6 +121,31 @@ The thinnest real end-to-end slice (Walking Skeleton) is: hub + SQLite log + WS 
 
 **Primary recommendation:** Build hub-and-worker processes around one typed event contract (Pydantic -> JSON Schema -> TS), use Pipecat only for STT/LLM/TTS plumbing with an external, plain-Python `TurnEngine` that owns wake/sleep/mute/conversation state, and gate three spikes in Wave 0 (Pipecat fit with go/no-go, STT latency on GPU, gateway `GET /models` + fast-role latency) before committing the rest.
 
+## Revision 2026-10-15: Voice Stack Changed After Research (read before the rest)
+
+The user changed the voice stack after this research was written (CONTEXT.md D-32 to D-41). Where this document conflicts with those decisions, the decisions win.
+
+**Superseded in this document:**
+- faster-whisper on the GPU as the speech-to-text engine, including the CUDA/cuDNN wheels, the STT VRAM spike and VAD-segmented pseudo-streaming. Replaced by Groq cloud Whisper for final transcripts plus local Moonshine for live words and fallback (D-37, D-38).
+- Cartesia for every reply with kokoro-onnx as the fallback (old D-16). Replaced by the voice router: Pocket TTS everyday, Cartesia for big moments, Chatterbox only on mains power with the GPU idle, kokoro-onnx last (D-33).
+- F1 (disk full): closed. C: has 58.5 GB free (`Get-PSDrive`, 2026-10-15).
+- Open Questions 1, 2, 3, 4, 5 and 8: resolved by default in D-40 and D-41.
+
+**New facts (checked 2026-10-15):**
+
+| Topic | Fact | Source |
+|-------|------|--------|
+| Groq speech-to-text | `whisper-large-v3` and `whisper-large-v3-turbo`: 20 requests/min, 2,000/day, 7,200 audio s/hour, 28,800 audio s/day (the page does not say which plan; confirm in the account limits page). OpenAI-compatible `audio/transcriptions` endpoint. | [CITED: console.groq.com/docs/rate-limits] |
+| Pocket TTS | Code MIT; weights and preset-voice licences are on Hugging Face (not checked). About 200 ms to first audio claimed, about 6x real time on an M4 MacBook Air, 2 CPU cores, streaming, voice cloning from a WAV (consent required by its terms). No emotion or style parameter. Python 3.10-3.14. Windows default wheels pull CPU-only PyTorch (about 200 MB, versus about 3 GB for CUDA builds on Linux). | [CITED: github.com/kyutai-labs/pocket-tts README] |
+| Chatterbox | Turbo is 350M parameters; official card says "less compute and VRAM" than earlier models but gives no GB figure. Base Chatterbox has `exaggeration` (default 0.5). Sources conflict on whether Turbo honours `exaggeration` (Mintlify and NVIDIA docs say no). Turbo has native tags such as `[laugh]`. English only, 24 kHz. | [CITED: huggingface.co/ResembleAI/chatterbox-turbo], [CITED: docs.nvidia.com/ace-for-games/chatterbox-tts] |
+| Cartesia Free | 20K credits a month; 1 credit = 1 TTS character; about 27 minutes of audio; unused credits roll over up to 2x; no voice cloning on Free; commercial licence starts at Pro. | [CITED: cartesia.ai/pricing] |
+| Tone detection | Official emotion2vec+ large is about 300M parameters (5 classes: angry, happy, neutral, sad, unknown; licence "other"). Community `emotion2vec-web-distill` is a 2.23M-parameter, 9.7 MB ONNX distillation that runs in real time on WASM; its author says it approximates one teacher model and is not a general system. Accuracy unverified. | [CITED: huggingface.co/emotion2vec/emotion2vec_plus_large], [CITED: huggingface.co/thomashallock/emotion2vec-web-distill] |
+
+**New spikes for Wave 0 (replace the STT-on-GPU spike):**
+- **S-STT:** Groq `whisper-large-v3-turbo` latency from end of turn to final text with real mic turns; Moonshine live-word latency and CPU load on the i5-12500H; switch to Moonshine when Groq returns 429 or is unreachable.
+- **S-TTS:** Pocket TTS first-audio time and CPU load on this machine; a mood-clip test the user listens to (does a calm clip versus an upbeat clip change the delivery enough?); Chatterbox base VRAM and first-audio time next to the HUD; Cartesia stock-voice audition.
+- **S-TONE:** prosody features plus one small emotion model on recorded user turns: CPU time per turn and whether the labels look right to the user.
+
 ## Critical Findings the Planner Must Act On
 
 | # | Finding | Evidence | Action |

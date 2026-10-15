@@ -36,7 +36,7 @@ created: "2026-10-14"
 | `Presence` | dashboard, mini | Orb. Props `{ state, size }`; reads mic and TTS levels from refs, not React state. Phase 6 swaps the internals, keeps the props |
 | `TranscriptView` | dashboard | Chat-style list, live partial row, system rows |
 | `HealthPanel` | dashboard | Subsystem rows and Language models rows |
-| `VoiceCard` | dashboard | Active voice and Cartesia credits |
+| `VoiceCard` | dashboard | Last voice engine, Cartesia credits, speech-to-text source |
 | `MuteButton` | dashboard | The only primary button in the phase |
 | `MiniIndicator` | mini window | Orb, caption pill, badge |
 | `StatusChip` | health rows, mode | Icon plus text label, never color alone |
@@ -234,9 +234,10 @@ Behavior rules:
 - Language models: three role rows (Brain, Fast, Vision). Row = role name, then active `provider / model` in mono with an accent dot, then a chip. Chip values: Active, Fallback in use (warn, shows "{n} of {m}"), Cooling down until HH:MM (warn), Failing (alert), Not configured (text-3, `CircleDashed`), Not used yet (Vision only in Phase 1, text-3). A role row is a disclosure (`aria-expanded`); expanding lists the ordered chain, one line per entry with provider, model, and that entry's own status chip, so "Not configured" providers are always inspectable. Collapsed by default. A one-line summary under the header always shows the count: "{n} of 5 providers not configured" (hidden at zero).
 - Changes in a status update in place with a 120 ms cross-fade; no row reordering, no layout shift.
 
-### Voice card [D-15, D-16, D-17]
-- Row 1: "Voice" and the active voice: "Cartesia" with the configured voice name, or "Local voice" with `Kokoro`. A chip says "Primary" or "Fallback" (warn).
-- Row 2: "Cartesia credits" with remaining credits in mono (tabular, thousands separators). Under 10% remaining: number turns `--snow-warn`. At zero or when Cartesia is unreachable: the active-voice row flips to Local voice, and a Label line explains why (copy below). Switching back is automatic; the chip returns to Primary.
+### Voice card [D-15, D-17, D-33, D-37, D-38] (revised 2026-10-15)
+- Row 1: "Voice" and the engine that spoke the last reply: "Pocket TTS" (everyday), "Cartesia" (big moments), "Chatterbox" (GPU, when allowed) or "Kokoro" (last fallback), with the configured voice name. A chip says "Everyday", "Big moment", "GPU" or "Fallback" (warn, Kokoro only).
+- Row 2: "Cartesia credits" with remaining credits in mono (tabular, thousands separators). Under 10% remaining: number turns `--snow-warn`. At zero or when Cartesia is unreachable: a Label line explains that big moments use the everyday voice (copy below). Recovery is automatic.
+- Row 3: "Speech-to-text" and the source of the last final transcript: "Groq cloud" or "Local (Moonshine)". A chip says "Primary" or "Fallback" (warn). On fallback, a Label line explains why (copy below).
 
 ### Keyboard and accessibility
 - Every control is a real `<button>` or disclosure, reachable by Tab in reading order: Mute button, dashboard orb, role disclosures, "Jump to latest". Focus ring 2px `#67E8F9`, 2px offset, never removed.
@@ -260,7 +261,8 @@ Minimum signals the core must provide to the HUD over the loopback WebSocket, as
 | `transcript.partial`, `transcript.final` (user); `reply.delta`, `reply.final`, `reply.interrupted` (Snow); `conversation.started`, `conversation.ended` | Transcript, mini caption |
 | `mute.changed { muted }` | Banner, button, tray, mini |
 | `health.snapshot` / `health.changed` (per subsystem status; per provider status incl. not_configured, cooling_down_until; per role active provider/model, chain entry statuses, fallback index) | Health panel |
-| `voice.status { active: cartesia|local, voice_name, credits_remaining|null, reason }` | Voice card, system rows |
+| `voice.status { engine: pocket_tts|cartesia|chatterbox|kokoro, voice_name, credits_remaining|null, cartesia_available, reason }` | Voice card, system rows |
+| `stt.status { source: groq|local, reason, retry_after|null }` | Voice card, system rows |
 | Provider-switch and voice-switch notices as system events | Transcript system rows |
 
 The HUD is a WebSocket client only; it never needs Electron IPC for data (IPC is limited to window chrome: show/hide, drag, click-through toggle, tray, menus).
@@ -284,8 +286,10 @@ UI strings are fixed. Snow's spoken lines are LLM-generated and are not specifie
 | Error state: no model reachable | System row: "No language model is reachable, so Snow cannot reply. Open Language models below to see which providers failed." |
 | Error state: privacy block [D-26] | System row: "Request held back: only providers not cleared for private data were available. Add a trusted provider key to continue." |
 | Provider switched [D-28] | System row: "Switched {role} model to {provider} ({reason})." Reasons: "rate limit", "out of quota", "service error", "timeout", "unreachable" |
-| Voice fallback: out of credits [D-16] | Voice card helper: "Cartesia credits are used up. Using the local voice." |
-| Voice fallback: unreachable [D-16] | Voice card helper: "Cartesia is unreachable. Using the local voice." |
+| Voice fallback: out of credits [D-33] | Voice card helper: "Cartesia credits are used up. Big moments use the everyday voice." |
+| Voice fallback: unreachable [D-33] | Voice card helper: "Cartesia is unreachable. Big moments use the everyday voice." |
+| Speech-to-text fallback: unreachable [D-38] | Voice card helper: "Groq speech-to-text is unreachable. Using the local model." |
+| Speech-to-text fallback: limit [D-38] | Voice card helper: "Groq speech-to-text limit reached. Using the local model until {HH:MM}." |
 | Credits unavailable | Credits row value: "Unavailable" with helper "Cartesia did not report a balance." |
 | Subsystem Down | Chip: "Down"; row helper: "Snow is restarting it automatically." while supervisor retries, otherwise "Could not restart. See logs." |
 | Provider not configured [D-25] | Chip: "Not configured"; chain row helper: "No key stored. Run `snow setup` to add one." |
@@ -316,7 +320,7 @@ Applicable state considerations resolved: 26 covered, 2 backstop, 3 dismissed, 1
 | error | media (Orb) | ✅ covered | Core socket lost puts the orb in the `offline` state ("Reconnecting") |
 | error | list-collection (Subsystem rows) | ✅ covered | A Down or Restarting subsystem shows its chip plus helper line, an 8px alert dot on the mini orb, and a tray tooltip suffix "(attention)" |
 | error | interactive-control (Reply path) | ✅ covered | Exhausted chains and privacy blocks render as transcript system rows using the documented copy; never a modal |
-| error | media (Voice card) | ✅ covered | Cartesia out of credits or unreachable switches the Voice card to Local voice with the documented helper line |
+| error | media (Voice card) | ✅ covered | Cartesia out of credits or unreachable, and Groq speech-to-text unreachable or rate-limited, each show the documented helper line on the Voice card |
 | empty | static-content (Credits value) | ⚠ unresolved — planner must treat as assumption | Whether Cartesia exposes a remaining-credit balance via API (and in what unit) is unconfirmed (research flag "Cartesia timestamps and credit metering"). Planner assumes "Unavailable" with helper "Cartesia did not report a balance." until the spike confirms a source |
 | populated | list-collection (Transcript) | 🧪 backstop | Visual-regression test with a fixed 12-turn fixture (user, Snow, interrupted, system rows); lifts as `{ statement, verification: backstop }` |
 | populated | list-collection (Health card) | ✅ covered | Subsystem rows and three collapsed role rows render from the snapshot with status chips; expanding a role lists its ordered chain with per-entry chips |

@@ -143,3 +143,17 @@
 - Phase 6: orb reacts to both voices exactly like Age of Ultron Jarvis; no ambient lighting, all effects on the orb
 - Optional always-listening mode after speaker verification
 - Push-to-talk hotkey, only if the wake word proves unreliable
+
+## Voice stack revision (2026-10-15, during /gsd-plan-phase 1)
+
+| Question | User answer |
+|----------|-------------|
+| Are Pocket TTS or Kokoro as good as Cartesia, with emotion and the user's way of speaking? | Told: no; Cartesia leads on emotion. User wants Snow to respond to their tone. |
+| How to respond to tone? | Accepted Claude's suggestion: local tone detection plus a tone tag to the LLM, mood clips for the local voice. |
+| GPU voice (Chatterbox) as main voice? | First chose it, then asked for the least laptop load with emotion and no compromise. Told this is not fully possible for free. |
+| Final mix | "yes go with the mix": Pocket TTS everyday, Cartesia for big moments, Chatterbox only when plugged in and GPU idle. |
+| Groq for speech-to-text? | "groq is fine" |
+| Compromises | Listed and accepted: basic everyday emotion, slight voice shift between engines, weaker hearing offline, free limits, Groq hears conversation turns, live words via a local model. |
+| Disk | Freed; C: now has 58.5 GB free. |
+| Repo visibility, trust, topology, wake-word training, LLM-down fallback | "ok move ahead": Claude set reversible defaults (D-40, D-41). |
+| Mood stance | Not answered; Claude set "balance, like Jarvis" (D-36). |
