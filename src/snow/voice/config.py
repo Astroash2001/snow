@@ -34,6 +34,13 @@ class TurnConfig(_Strict):
 
 class ConversationConfig(_Strict):
     silence_timeout_s: float
+    reply_timeout_s: float = 20.0  # give up waiting for a reply after this much audio
+
+
+class PhrasesConfig(_Strict):
+    end: list[str]
+    sleep: list[str]
+    mute: list[str]
 
 
 class GroqConfig(_Strict):
@@ -53,4 +60,5 @@ class VoiceConfig(_Strict):
     wake: WakeConfig
     turn: TurnConfig
     conversation: ConversationConfig
+    phrases: PhrasesConfig
     stt: SttConfig

@@ -28,7 +28,14 @@ wake_alone_window_s = 1.0
 barge_in_min_ms = 250  # used by plan 01-29
 
 [conversation]
-silence_timeout_s = 45  # inside D-08's 30-60 s; used by plan 01-18
+silence_timeout_s = 45  # inside D-08's 30-60 s, counted in audio time
+reply_timeout_s = 20    # stop waiting for a reply that never comes
+
+# Whole-utterance voice commands (matched locally, no LLM): never substrings.
+[phrases]
+end = ["that's all", "that is all", "thanks that's all", "thank you that's all", "that'll be all"]
+sleep = ["go to sleep", "snow go to sleep"]
+mute = ["mute", "snow mute", "mute yourself", "snow mute yourself"]
 
 [stt.groq]
 base_url = "https://api.groq.com/openai/v1"

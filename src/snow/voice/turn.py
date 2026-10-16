@@ -4,7 +4,9 @@ Never reads the wall clock, so a recorded file, the pre-roll burst and live audi
 behave identically. Framework-free: VAD and end-of-turn come in through small protocols.
 """
 
+import math
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Protocol
@@ -12,13 +14,22 @@ from typing import Literal, Protocol
 import numpy as np
 import numpy.typing as npt
 
-from snow.voice.config import TurnConfig
+from snow.voice.config import ConversationConfig, TurnConfig
 from snow.voice.wake import WakeHit
 
 Pcm = npt.NDArray[np.int16]
 Presence = Literal["sleeping", "listening", "thinking", "speaking", "muted"]
 
 CHUNK = 512  # Silero's chunk at 16 kHz
+_PRE_SPEECH_S = 0.5  # follow-on turns keep this much audio before speech is confirmed
+_LEVEL_FLOOR_DB = -60.0
+
+
+def mic_level(chunk: Pcm) -> float:
+    """RMS of a chunk mapped from -60..0 dBFS to 0..1 (the HUD's audio.level)."""
+    rms = float(np.sqrt(np.mean(np.square(chunk.astype(np.float64))))) / 32768.0
+    db = 20.0 * math.log10(max(rms, 1e-9))
+    return min(1.0, max(0.0, (db - _LEVEL_FLOOR_DB) / -_LEVEL_FLOOR_DB))
 
 
 class State(Enum):
@@ -94,6 +105,7 @@ class _Turn:
     silence: int = 0
     asked: bool = False  # Smart Turn already answered for this stretch of silence
     last_speech_end: int = 0
+    follow_on: bool = False  # opened without a wake phrase (D-08)
 
 
 class TurnEngine:
@@ -104,8 +116,10 @@ class TurnEngine:
         eot: Eot,
         events: EngineEvents | None = None,
         sample_rate: int = 16000,
+        conversation: ConversationConfig | None = None,
     ) -> None:
         self._cfg = cfg
+        self._conv = conversation or ConversationConfig(silence_timeout_s=45)
         self._vad = vad
         self._eot = eot
         self.events: EngineEvents = events or NullEvents()
@@ -113,13 +127,51 @@ class TurnEngine:
         self.state = State.SLEEPING
         self._turn: _Turn | None = None
         self._rem: Pcm = np.zeros(0, dtype=np.int16)
+        self._waiting = False  # a reply is pending: deaf, silence timer paused
+        self._waited = 0
+        self._idle = 0  # listening samples without speech (audio time)
+        self._replaying = False
+        # Loop thread -> audio thread requests; deque appends are thread-safe.
+        self._inbox: deque[tuple[str, str]] = deque()
+
+    def reply_finished(self) -> None:
+        """Thread-safe: the reply is done; listen again, restart the silence timer."""
+        self._inbox.append(("reply", ""))
+
+    def end_conversation(self, reason: str) -> None:
+        """Thread-safe: end the open conversation (phrase or sleep command)."""
+        self._inbox.append(("end", reason))
+
+    def drain(self) -> None:
+        while self._inbox:
+            kind, arg = self._inbox.popleft()
+            if kind == "reply":
+                self._reply_done()
+            else:
+                self._end(arg)
+
+    def _reply_done(self) -> None:
+        self._idle = 0
+        if self._waiting and self.state is State.AWAKE:
+            self._waiting = False
+            self.events.on_presence("listening")
+
+    def _end(self, reason: str) -> None:
+        if self.state is not State.AWAKE:
+            return
+        self._close_turn()
+        self._waiting = False
+        self.state = State.SLEEPING
+        self.events.on_conversation_end(reason)
+        self.events.on_presence("sleeping")
 
     def _samples(self, seconds: float) -> int:
         return int(seconds * self._sr)
 
     def on_wake(self, hit: WakeHit) -> None:
+        self.drain()
         # A wake inside a turn is the user's own words, not a new conversation.
-        if self.state is State.MUTED or self._turn is not None:
+        if self.state is State.MUTED or self._turn is not None or self._waiting:
             return
         self.events.on_wake(hit)
         if self.state is State.SLEEPING:
@@ -131,11 +183,15 @@ class TurnEngine:
         self._vad.reset()
         self._eot.clear()
         self._rem = np.zeros(0, dtype=np.int16)
+        self._idle = 0
+        self._replaying = True  # the burst is old audio: no mic levels for it
         for frame in hit.preroll:  # D-09: the words right after the wake phrase count
             self._ingest(frame)
+        self._replaying = False
 
     def feed(self, frame: Pcm) -> None:
-        if self.state is State.AWAKE and self._turn is not None:
+        self.drain()
+        if self.state is State.AWAKE:
             self._ingest(frame)
 
     def _ingest(self, frame: Pcm) -> None:
@@ -143,9 +199,26 @@ class TurnEngine:
         usable = len(buf) - len(buf) % CHUNK
         self._rem = buf[usable:]
         for i in range(0, usable, CHUNK):
-            if self._turn is None:  # the previous chunk ended the turn
+            if self.state is not State.AWAKE:  # the conversation just ended
                 return
-            self._chunk(buf[i : i + CHUNK])
+            self._next(buf[i : i + CHUNK])
+
+    def _next(self, chunk: Pcm) -> None:
+        if self._waiting:
+            self._waited += CHUNK
+            if self._waited >= self._samples(self._conv.reply_timeout_s):
+                self._reply_done()  # no reply is coming (providers down, STT failed)
+            return
+        if self._turn is None:  # between turns: stay listening, no re-wake (D-08)
+            self._turn = _Turn(id=uuid.uuid4().hex[:12], boundary=0, follow_on=True)
+        if not self._replaying:
+            self.events.on_level(mic_level(chunk))
+        if not self._turn.speaking:
+            self._idle += CHUNK
+            if self._idle >= self._samples(self._conv.silence_timeout_s):
+                self._end("silence")
+                return
+        self._chunk(chunk)
 
     def _chunk(self, chunk: Pcm) -> None:
         t = self._turn
@@ -153,7 +226,8 @@ class TurnEngine:
         cfg = self._cfg
         t.chunks.append(chunk)
         t.samples += CHUNK
-        self._eot.append(chunk)
+        if t.speaking or not t.follow_on:  # follow-on silence is not worth analysing
+            self._eot.append(chunk)
         if t.samples <= t.boundary:  # pre-roll: kept as audio, not counted as speech
             return
         if self._vad.speech_prob(chunk) >= cfg.vad_threshold:
@@ -162,6 +236,10 @@ class TurnEngine:
             t.last_speech_end = t.samples
             if not t.speaking and t.speech_run >= self._samples(cfg.start_secs):
                 t.speaking = True
+                self._idle = 0
+                if t.follow_on:
+                    for kept in t.chunks:
+                        self._eot.append(kept)
                 self.events.on_turn_start(t.id)
         else:
             t.speech_run = 0
@@ -169,8 +247,12 @@ class TurnEngine:
                 t.silence += CHUNK
 
         if not t.speaking:
-            if t.samples - t.boundary >= self._samples(cfg.wake_alone_window_s):
-                self._close_turn()
+            if t.follow_on:  # keep a short lead-in only, not 45 s of silence
+                while t.samples > self._samples(_PRE_SPEECH_S):
+                    t.chunks.pop(0)
+                    t.samples -= CHUNK
+            elif t.samples - t.boundary >= self._samples(cfg.wake_alone_window_s):
+                self._close_turn()  # D-09: the conversation stays open
                 self.events.on_wake_alone()
             return
         if t.silence == 0:
@@ -198,6 +280,11 @@ class TurnEngine:
     def _end_turn(self, t: _Turn) -> None:
         pcm = np.concatenate(t.chunks).tobytes()
         self._close_turn()
+        self._waiting = (
+            True  # deaf until the reply is done (plan 01-26: end of playback)
+        )
+        self._waited = 0
+        self.events.on_presence("thinking")
         self.events.on_turn_end(
             t.id, pcm, t.samples * 1000 // self._sr, t.last_speech_end
         )

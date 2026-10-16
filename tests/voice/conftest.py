@@ -18,7 +18,7 @@ import pytest
 
 from snow.config.secrets import Secret
 from snow.config.settings import load_config
-from snow.contracts.events import Event
+from snow.contracts.events import Event, ReplyFinal, TranscriptFinal
 from snow.voice.config import VoiceConfig
 from snow.voice.pipeline import VoicePipeline
 from snow.voice.sources import FileSource
@@ -35,12 +35,27 @@ GROQ_PATH = "/openai/v1/audio/transcriptions"
 class FakeHub:
     def __init__(self) -> None:
         self.events: list[Event] = []
+        self.pipeline: VoicePipeline | None = None  # set to answer every transcript
 
     async def publish(self, event: Event) -> None:
         self.events.append(event)
+        if self.pipeline is not None and isinstance(event, TranscriptFinal):
+            await self.pipeline.on_hub_event(reply_to(event))
 
     def types(self) -> list[str]:
         return [e.type for e in self.events]
+
+
+def reply_to(heard: TranscriptFinal) -> ReplyFinal:
+    return ReplyFinal(
+        ts_ns=0,
+        source="brain",
+        turn_id=heard.turn_id,
+        text="ok",
+        emotion="neutral",
+        big_moment=False,
+        reply_source="llm",
+    )
 
 
 @dataclass
@@ -48,6 +63,7 @@ class FakeGroq:
     """Records uploads; replies with `text` as the transcription."""
 
     text: str = ""
+    texts: list[str] = field(default_factory=list[str])  # per request, then `text`
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
     violations: list[str] = field(default_factory=list[str])
 
@@ -58,7 +74,8 @@ class FakeGroq:
             and request.url.path == GROQ_PATH
         ):
             self.requests.append(request)
-            return httpx2.Response(200, json={"text": self.text})
+            text = self.texts.pop(0) if self.texts else self.text
+            return httpx2.Response(200, json={"text": text})
         self.violations.append(f"{request.method} {request.url}")
         return httpx2.Response(599)
 
@@ -92,14 +109,16 @@ def speech_end_s(name: str) -> float:
 class Run:
     hub: FakeHub
     hits: list[WakeHit]
+    engine: TurnEngine
 
 
-RunFixture = Callable[[str, str], Awaitable[Run]]
+RunFixture = Callable[..., Awaitable[Run]]
 
 
 @pytest.fixture
 def run_fixture(groq: FakeGroq, wake_models: None) -> RunFixture:
-    async def run(name: str, text: str) -> Run:
+    async def run(name: str, text: str, *, replies: bool = False) -> Run:
+        """`replies`: the hub answers every transcript, so the next turn is heard."""
         groq.text = text
         cfg = load_config("voice.toml", VoiceConfig)
         hub = FakeHub()
@@ -107,7 +126,9 @@ def run_fixture(groq: FakeGroq, wake_models: None) -> RunFixture:
         wake = WakeGate(
             w.model, w.threshold, w.patience_frames, w.preroll_frames, w.refractory_s
         )
-        engine = TurnEngine(cfg.turn, VadDetector(), EndOfTurn())
+        engine = TurnEngine(
+            cfg.turn, VadDetector(), EndOfTurn(), conversation=cfg.conversation
+        )
         hits: list[WakeHit] = []
         on_wake = engine.on_wake
 
@@ -121,12 +142,14 @@ def run_fixture(groq: FakeGroq, wake_models: None) -> RunFixture:
             lambda _name: Secret("gsk_test_key_not_real"),
             transport=httpx2.MockTransport(groq.handler),
         )
-        pipeline = VoicePipeline(
-            cfg, hub, FileSource(AUDIO / f"{name}.wav"), wake, engine, stt
-        )
+        source = FileSource(AUDIO / f"{name}.wav")
+        pipeline = VoicePipeline(cfg, hub, source, wake, engine, stt)
+        if replies:
+            hub.pipeline = pipeline
+            source.hold = lambda: pipeline.waiting_reply
         await pipeline.start()
         await pipeline.wait_done()
         await pipeline.stop()
-        return Run(hub, hits)
+        return Run(hub, hits, engine)
 
     return run

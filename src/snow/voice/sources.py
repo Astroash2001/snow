@@ -22,6 +22,7 @@ log = logging.getLogger("snow.voice")
 Frame = npt.NDArray[np.int16]
 OnFrame = Callable[[Frame], None]
 
+_HOLD_MAX_S = 30.0
 _SILENCE_TAIL_S = 2.0  # lets the last turn of a recording end like live audio does
 
 
@@ -155,7 +156,10 @@ class FileSource:
         realtime: bool = False,
         sample_rate: int = 16000,
         frame_samples: int = 1280,
+        hold: Callable[[], bool] | None = None,
     ) -> None:
+        self._gave_up = False
+        self.hold = hold  # True = wait: a reply is pending, like a user listening
         self._path = path
         self._realtime = realtime
         self._rate = sample_rate
@@ -178,11 +182,24 @@ class FileSource:
                 if self._stop.is_set():
                     return
                 pump.deliver(audio[start : start + self._frame])
+                self._wait_while_held()
                 if self._realtime:
                     time.sleep(self._frame / self._rate)
 
         self._thread = threading.Thread(target=run, name="snow-voice-file", daemon=True)
         self._thread.start()
+
+    def _wait_while_held(self) -> None:
+        # shortcut: one capped wall wait per pending reply, so a silent brain cannot
+        # hang a replay; after it the file just plays on.
+        if not (self.hold and self.hold()):
+            self._gave_up = False
+            return
+        deadline = time.monotonic() + _HOLD_MAX_S
+        while not self._gave_up and self.hold() and not self._stop.is_set():
+            if time.monotonic() >= deadline:
+                self._gave_up = True
+            time.sleep(0.005)
 
     def close(self) -> None:
         self._stop.set()
