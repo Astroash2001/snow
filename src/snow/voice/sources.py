@@ -1,0 +1,190 @@
+"""Audio sources: the live microphone and WAV files (tests, dev replay).
+
+Audio is only ever held in memory (D-18). Both sources deliver fixed-size int16 frames
+to one callback on one processing thread, so downstream code is single-threaded.
+"""
+
+import logging
+import queue
+import threading
+import time
+import wave
+from collections.abc import Callable
+from pathlib import Path
+from typing import Protocol
+
+import numpy as np
+import numpy.typing as npt
+import sounddevice as sd  # pyright: ignore[reportMissingTypeStubs]
+
+log = logging.getLogger("snow.voice")
+
+Frame = npt.NDArray[np.int16]
+OnFrame = Callable[[Frame], None]
+
+_SILENCE_TAIL_S = 2.0  # lets the last turn of a recording end like live audio does
+
+
+class AudioSource(Protocol):
+    def open(self, on_frame: OnFrame) -> None: ...
+
+    def close(self) -> None: ...
+
+    @property
+    def is_open(self) -> bool: ...
+
+
+class _Pump:
+    """Runs `on_frame` on a single thread; one bad frame never kills the thread."""
+
+    def __init__(self, on_frame: OnFrame) -> None:
+        self._on_frame = on_frame
+
+    def deliver(self, frame: Frame) -> None:
+        try:
+            self._on_frame(frame)
+        except Exception as e:  # noqa: BLE001 - a deaf worker is worse than a dropped frame
+            log.error("frame_failed kind=%s", type(e).__name__)
+
+
+def _wasapi_input(name: str) -> int | None:
+    """Index of the WASAPI input device matching `name` (empty = the default one)."""
+    wasapi = next(
+        (h for h in sd.query_hostapis() if "WASAPI" in h["name"]),  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType, reportGeneralTypeIssues]
+        None,
+    )
+    if wasapi is None:
+        return None
+    if not name:
+        return int(wasapi["default_input_device"])  # pyright: ignore[reportUnknownArgumentType]
+    for index in wasapi["devices"]:  # pyright: ignore[reportUnknownVariableType]
+        info = sd.query_devices(index)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        if info["max_input_channels"] > 0 and name.lower() in info["name"].lower():  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            return int(index)  # pyright: ignore[reportUnknownArgumentType]
+    return None
+
+
+class MicSource:
+    def __init__(
+        self, device: str = "", sample_rate: int = 16000, frame_samples: int = 1280
+    ) -> None:
+        self._device = device
+        self._rate = sample_rate
+        self._frame = frame_samples
+        self._q: queue.Queue[Frame] = queue.Queue(maxsize=200)  # 16 s of audio
+        self._stop = threading.Event()
+        self._stream: sd.InputStream | None = None  # pyright: ignore[reportUnknownMemberType, reportInvalidTypeForm]
+        self._thread: threading.Thread | None = None
+
+    @property
+    def is_open(self) -> bool:
+        return self._stream is not None
+
+    def _callback(self, indata: npt.NDArray[np.int16], *_: object) -> None:
+        # PortAudio thread: copy and return, nothing else (Pitfall 10).
+        try:
+            self._q.put_nowait(indata[:, 0].copy())
+        except queue.Full:
+            log.warning("mic_frame_dropped")
+
+    def open(self, on_frame: OnFrame) -> None:
+        index = _wasapi_input(self._device)
+        pump = _Pump(on_frame)
+        self._stop.clear()
+
+        def run() -> None:
+            while not self._stop.is_set():
+                try:
+                    pump.deliver(self._q.get(timeout=0.1))
+                except queue.Empty:
+                    continue
+
+        self._thread = threading.Thread(
+            target=run, name="snow-voice-audio", daemon=True
+        )
+        self._thread.start()
+        self._stream = sd.InputStream(  # pyright: ignore[reportUnknownMemberType]
+            samplerate=self._rate,
+            channels=1,
+            dtype="int16",
+            blocksize=self._frame,
+            device=index,
+            callback=self._callback,
+            # Without auto_convert WASAPI rejects 16 kHz on a 48 kHz device.
+            extra_settings=sd.WasapiSettings(auto_convert=True)
+            if index is not None
+            else None,  # pyright: ignore[reportUnknownMemberType]
+        )
+        self._stream.start()
+
+    def close(self) -> None:
+        self._stop.set()
+        if self._stream is not None:
+            self._stream.stop()
+            self._stream.close()
+            self._stream = None
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+            self._thread = None
+
+
+def read_wav(path: Path, sample_rate: int) -> npt.NDArray[np.int16]:
+    """Read a 16-bit PCM WAV as mono int16 at `sample_rate`."""
+    with wave.open(str(path), "rb") as w:
+        if w.getsampwidth() != 2:
+            raise ValueError(f"{path.name}: only 16-bit PCM WAV is supported")
+        channels, rate = w.getnchannels(), w.getframerate()
+        pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    mono = (
+        pcm.reshape(-1, channels).mean(axis=1)
+        if channels > 1
+        else pcm.astype(np.float64)
+    )
+    if rate != sample_rate:
+        # shortcut: linear interpolation, use a polyphase filter if quality matters.
+        target = np.arange(int(len(mono) * sample_rate / rate)) * rate / sample_rate
+        mono = np.interp(target, np.arange(len(mono)), mono)
+    return mono.astype(np.int16)
+
+
+class FileSource:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        realtime: bool = False,
+        sample_rate: int = 16000,
+        frame_samples: int = 1280,
+    ) -> None:
+        self._path = path
+        self._realtime = realtime
+        self._rate = sample_rate
+        self._frame = frame_samples
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+
+    @property
+    def is_open(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def open(self, on_frame: OnFrame) -> None:
+        silence = np.zeros(int(_SILENCE_TAIL_S * self._rate), dtype=np.int16)
+        audio = np.concatenate([read_wav(self._path, self._rate), silence])
+        pump = _Pump(on_frame)
+        self._stop.clear()
+
+        def run() -> None:
+            for start in range(0, len(audio) - self._frame + 1, self._frame):
+                if self._stop.is_set():
+                    return
+                pump.deliver(audio[start : start + self._frame])
+                if self._realtime:
+                    time.sleep(self._frame / self._rate)
+
+        self._thread = threading.Thread(target=run, name="snow-voice-file", daemon=True)
+        self._thread.start()
+
+    def close(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
