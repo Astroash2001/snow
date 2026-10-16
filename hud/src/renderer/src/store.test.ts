@@ -34,3 +34,51 @@ describe("reduce", () => {
     expect(reduce(initialState, { kind: "hello" } as never)).toBe(initialState);
   });
 });
+
+// Minimal hand-built frames: the reducer reads only type, turn_id, text and ts_ns.
+const ev = (type: string, fields: Record<string, unknown> = {}) =>
+  ({
+    kind: "event",
+    event: { type, ts_ns: 1, turn_id: "t1", ...fields },
+  }) as unknown as WireMessage;
+const run = (...msgs: WireMessage[]) => msgs.reduce(reduce, initialState);
+
+describe("reduce, turn building", () => {
+  it("a final transcript adds a You row and clears the partial", () => {
+    const mid = run(ev("transcript.partial", { text: "hel" }));
+    expect(mid.partial).toEqual({ turnId: "t1", text: "hel" });
+    const s = reduce(mid, ev("transcript.final", { text: "hello snow" }));
+    expect(s.partial).toBeNull();
+    expect(s.rows.map((r) => [r.kind, r.text])).toEqual([["user", "hello snow"]]);
+  });
+
+  it("a final after a snapshot appends a You row to the snapshot's rows", () => {
+    const s = reduce(
+      reduce(initialState, snapshot),
+      ev("transcript.final", { text: "next", turn_id: "t9" }),
+    );
+    expect(s.connection).toBe("online");
+    expect(s.rows.at(-1)).toMatchObject({ kind: "user", text: "next" });
+    expect(s.rows.length).toBeGreaterThan(1);
+  });
+
+  it("reply deltas build one Snow row and the final replaces its text", () => {
+    const live = run(...["Good ", "morning", "!"].map((text) => ev("reply.delta", { text })));
+    expect(live.rows.map((r) => [r.kind, r.text])).toEqual([["snow", "Good morning!"]]);
+    const done = reduce(live, ev("reply.final", { text: "Good morning. Ready." }));
+    expect(done.rows.map((r) => [r.kind, r.text])).toEqual([["snow", "Good morning. Ready."]]);
+  });
+
+  it("conversation.started clears the rows and the partial", () => {
+    const s = run(ev("transcript.final", { text: "hi" }), ev("transcript.partial", { text: "x" }));
+    expect(s.rows).toHaveLength(1);
+    const cleared = reduce(s, ev("conversation.started"));
+    expect(cleared.rows).toEqual([]);
+    expect(cleared.partial).toBeNull();
+  });
+
+  it("returns the same state object for an unknown event type", () => {
+    const s = run(ev("transcript.final", { text: "hi" }));
+    expect(reduce(s, ev("future.thing"))).toBe(s);
+  });
+});
