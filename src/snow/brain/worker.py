@@ -218,6 +218,7 @@ class BrainWorker:
     # --- conversation turns ----------------------------------------------------
 
     def _cancel(self, event: TurnCancelled) -> None:
+        """turn.cancelled: stop the active turn's stream; no reply.final follows."""
         task = self._turns.get(event.turn_id or "")
         if task and task is not asyncio.current_task():
             task.cancel()
