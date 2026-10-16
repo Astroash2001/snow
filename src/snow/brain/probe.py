@@ -48,7 +48,9 @@ _PING: ChatCompletionToolParam = {
         "parameters": {"type": "object", "properties": {}},
     },
 }
-_MAX_TOKENS = 64  # reasoning models spend tokens thinking before the first visible text
+_MAX_TOKENS = (
+    256  # reasoning models spend tokens thinking before the first visible text
+)
 _MAX_CANDIDATES = (
     3  # how many ranked glob matches to try when an entry `requires` tools
 )
@@ -95,17 +97,14 @@ def _why(exc: Exception) -> str:
     return type(exc).__name__
 
 
-def _natural(model_id: str) -> list[tuple[int, int, str]]:
-    return [
-        (1, int(p), "") if p.isdigit() else (0, 0, p)
-        for p in re.split(r"(\d+)", model_id)
-        if p
-    ]
+def _version_key(model_id: str) -> tuple[tuple[int, ...], str]:
+    """Numbers in the ID first, so `gemini-3.8-flash` beats `gemini-omni-1.1-flash`."""
+    return tuple(int(n) for n in re.findall(r"\d+", model_id)), model_id
 
 
 def rank_matches(pattern: str, ids: list[str]) -> list[str]:
     """IDs matching the glob, highest version first."""
-    return sorted(fnmatch.filter(ids, pattern), key=_natural, reverse=True)
+    return sorted(fnmatch.filter(ids, pattern), key=_version_key, reverse=True)
 
 
 def _body(entry: ChainEntry | None) -> dict[str, Any]:
@@ -274,6 +273,7 @@ async def probe(
                 base.note = "no model and no match"
                 entries.append(base)
                 continue
+            skipped: list[str] = []
             for model in candidates:
                 base.model = model
                 (
@@ -282,16 +282,21 @@ async def probe(
                     base.ttft_s,
                     base.note,
                 ) = await stream_and_tools(prov, model, entry)
-                # A glob entry that needs tools keeps searching down the ranked list.
-                if "tools" not in entry.requires or base.tools:
+                # A glob entry keeps searching down the ranked list until one works,
+                # but an auth/permission error is account-wide: stop spending calls.
+                good = base.stream and (base.tools or "tools" not in entry.requires)
+                if good or "401" in base.note or "403" in base.note:
                     break
+                skipped.append(f"{model}: {base.note or 'failed'}")
+            if skipped:
+                base.note = "; ".join(
+                    x for x in (base.note, "failed " + ", ".join(skipped)) if x
+                )
             if role_name == "vision" and base.stream:
                 base.vision, why = await check_vision(
                     clients[prov], base.model, _body(entry)
                 )
                 base.note = "; ".join(x for x in (base.note, why) if x)
-            if not entry.model and not base.stream:
-                base.model = ""  # nothing confirmed: leave unresolved
             if prov == "experiential" and base.model in catalog:
                 base.note = "; ".join(
                     x

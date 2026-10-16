@@ -2,6 +2,7 @@
 # Reordering, adding or changing a provider, base URL or model is a config edit, no code change (CORE-04, D-23).
 # Per-model quirks: `params` are sent in the request body, `drop_params` are never sent.
 # An entry with model = "" is skipped as "not configured" until `snow dev probe-models` resolves its `match` glob (D-29).
+# Resolved entries keep `match` so a re-probe can find a newer ID. Probe notes below are dated 2026-10-17.
 # Providers marked untrusted never receive private data (D-26, D-41): Google AI Studio free and OpenRouter free only.
 
 [providers.experiential]
@@ -37,26 +38,38 @@ trust = "untrusted"
 [roles.brain]
 ttft_timeout_s = 6.0
 chain = [
+  # probe 2026-10-17: stream yes, tools yes, vision yes, first token about 1.0-1.6 s. gpt-6-luna is also listed (not adopted).
   { provider = "experiential", model = "gpt-5.6-luna", drop_params = ["temperature", "top_p"], params = { reasoning_effort = "low" } },
-  { provider = "google", model = "", match = "gemini-*-flash" },
-  { provider = "nvidia", model = "", match = "deepseek-v4-pro" },
-  { provider = "nvidia", model = "", match = "kimi-k3" },
-  { provider = "openrouter", model = "", match = "nemotron-3-super*:free" },
+  # probe 2026-10-17: gemini-3.6-flash stream yes (about 2.1 s), tools yes, vision yes. Newer gemini-3.7-flash and gemini-3.8-flash timed out or took 11 s to first token, so the newest verified ID is used.
+  { provider = "google", model = "gemini-3.6-flash", match = "gemini-[0-9]*-flash" },
+  # probe 2026-10-17: listed, but stream and tools both timed out at 30 s. NIM has no deepseek-v4-pro; deepseek-v4.1-flash is the closest listed.
+  { provider = "nvidia", model = "deepseek-ai/deepseek-v4.1-flash", match = "*deepseek-v4*" },
+  # probe 2026-10-17: stream yes (first token 29 s on the free tier), tools timed out at 30 s. NIM lists no kimi-k3 and kimi-k2.6 returns 404, so glm-5.3 replaces the Kimi slot.
+  { provider = "nvidia", model = "z-ai/glm-5.3", match = "z-ai/glm-5.3" },
+  # probe 2026-10-17: stream yes, tools yes, first token 1.2-2.0 s.
+  { provider = "openrouter", model = "nvidia/nemotron-3-super-120b-a12b:free", match = "*nemotron-3-super*:free" },
 ]
 
 [roles.fast]
 ttft_timeout_s = 2.5
 chain = [
+  # probe 2026-10-17: stream yes, tools yes. Measured first token over 8 runs: p50 0.456 s, p95 0.886 s, so it serves first (D-30).
   { provider = "groq", model = "openai/gpt-oss-120b", params = { reasoning_effort = "low" } },
+  # probe 2026-10-17: stream yes, tools yes, first token 0.12-0.49 s (single runs, not a p50).
   { provider = "groq", model = "qwen/qwen3.8-27b" },
+  # probe 2026-10-17: stream yes, tools yes (one tools call timed out at 30 s). Measured over 8 runs: p50 1.111 s, p95 1.73 s.
   { provider = "experiential", model = "deepseek-v4-flash" },
-  { provider = "openrouter", model = "", match = "*:free", requires = ["tools"] },
+  # probe 2026-10-17: stream yes, tools yes, but 18.7 s to first token on the free queue; a last resort only.
+  { provider = "openrouter", model = "nvidia/nemotron-3.5-lightning:free", match = "*nemotron-3.5-lightning:free", requires = ["tools"] },
 ]
 
 [roles.vision]
 ttft_timeout_s = 6.0
 chain = [
+  # probe 2026-10-17: stream yes, tools yes, vision yes (catalog input: text, pdf, image).
   { provider = "experiential", model = "gpt-5.6-luna", drop_params = ["temperature", "top_p"], params = { reasoning_effort = "low" } },
-  { provider = "google", model = "", match = "gemini-*-flash" },
+  # probe 2026-10-17: gemini-3.6-flash vision yes (see the brain entry).
+  { provider = "google", model = "gemini-3.6-flash", match = "gemini-[0-9]*-flash" },
+  # probe 2026-10-17: stream yes, but tools and image input were both rejected with 400 although the catalog claims image support; kept as a last resort.
   { provider = "experiential", model = "qwen3.8-27b" },
 ]

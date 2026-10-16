@@ -131,6 +131,11 @@ def _entry(report: dict[str, Any], role: str, provider: str) -> dict[str, Any]:
     )
 
 
+def test_rank_matches_ignores_unrelated_name_words() -> None:
+    ids = ["gemini-omni-1.1-flash", "gemini-3.8-flash", "gemini-flash-latest"]
+    assert rank_matches("gemini-*-flash", ids)[0] == "gemini-3.8-flash"
+
+
 def test_rank_matches_picks_highest_version_first() -> None:
     ids = ["gem-2.5-flash", "gem-3-flash", "gem-10-flash", "gem-3-pro"]
     assert rank_matches("gem-*-flash", ids) == [
