@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log
   5. Every change to Snow's repository runs typed, linted, tested CI, and a failing change cannot be merged
 
-**Plans:** 11/33 plans executed
+**Plans:** 12/33 plans executed
 
 Plans:
 **Wave 1**
@@ -57,7 +57,7 @@ Plans:
 - [ ] 01-10-PLAN.md — CI on windows-latest, private repo, secret and dependency scans, pre-push hook (QUAL-01)
 - [x] 01-11-PLAN.md — `snow setup` keys in Credential Manager, redacting structured logs, canary proof (SAFE-09, QUAL-03)
 - [x] 01-12-PLAN.md — Free-tier limits: header-driven cooldowns and daily counters (CORE-09)
-- [ ] 01-13-PLAN.md — Voice in: wake gate with pre-roll, TurnEngine, Groq speech-to-text, transcript to the brain
+- [x] 01-13-PLAN.md — Voice in: wake gate with pre-roll, TurnEngine, Groq speech-to-text, transcript to the brain
 - [x] 01-14-PLAN.md — Always-on: supervisor with Job Object, health, Task Scheduler autostart, quit, retention (CORE-01, CORE-02)
 
 **Wave 5** *(blocked on Wave 4 completion)*
@@ -241,7 +241,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Always-On Voice Loop | 11/33 | In Progress | - |
+| 1. Always-On Voice Loop | 12/33 | In Progress | - |
 | 2. Voice-Driven Claude Code with Safety Gate | 0/TBD | Not started | - |
 | 3. Steerable and Reviewable Agent Work | 0/TBD | Not started | - |
 | 4. Hand-off & Phone | 0/TBD | Not started | - |
