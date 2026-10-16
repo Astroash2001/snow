@@ -20,6 +20,9 @@ function createDashboard(): void {
       sandbox: true,
     },
   });
+  // The renderer only ever shows the one page it was loaded with: no navigation, no new windows.
+  win.webContents.on("will-navigate", (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.once("ready-to-show", () => win.show());
   win.loadFile(join(__dirname, "../renderer/index.html"));
 }

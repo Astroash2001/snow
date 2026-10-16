@@ -55,7 +55,10 @@ export function App() {
         {announcement}
       </div>
       <main className="p-4">
-        <h1 className="text-[28px] leading-[1.2] font-semibold" data-testid="state-word">
+        <h1
+          className="text-(length:--snow-size-display) leading-(--snow-leading-heading) font-semibold"
+          data-testid="state-word"
+        >
           {word}
         </h1>
         <ul className="mt-4 space-y-2">

@@ -53,3 +53,33 @@ test("dashboard shows the banner when the hub drops and recovers on a new port",
     rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test("renderer is locked down: CSP present, no navigation, no new windows", async () => {
+  const hub = await startMockHub({ script: [] });
+  const app = await electron.launch({
+    args: ["."],
+    cwd: hudDir,
+    env: { ...process.env, SNOW_HUB_URL: hub.url, SNOW_TOKEN: hub.token },
+  });
+  try {
+    const win = await app.firstWindow();
+    await expect(win.getByTestId("state-word")).toHaveText("Listening");
+    const csp = await win.evaluate(() =>
+      document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content"),
+    );
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("connect-src ws://127.0.0.1:*");
+
+    const href = await win.evaluate(() => location.href);
+    await win.evaluate(() => {
+      location.href = "data:text/html,navigated";
+      window.open("data:text/html,popup");
+    });
+    await win.waitForTimeout(500);
+    expect(await win.evaluate(() => location.href)).toBe(href);
+    expect(app.windows()).toHaveLength(1);
+  } finally {
+    await app.close();
+    await hub.close();
+  }
+});

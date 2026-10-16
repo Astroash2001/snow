@@ -1,0 +1,86 @@
+/* biome-ignore-all format: the spec writes hex colors uppercase and acceptance greps them verbatim */
+@import "tailwindcss";
+
+/* Every design token from 01-UI-SPEC, declared once. Components reference these variables only, never
+   raw hex, so Phase 6 can restyle by changing this block. Dark theme only. */
+:root {
+  /* Color */
+  --snow-bg: #0B0E14;
+  --snow-surface: #131824;
+  --snow-border: #222A3A;
+  --snow-accent: #67E8F9;
+  --snow-alert: #F87171;
+  --snow-text: #E6EAF2;
+  --snow-text-2: #A8B1C5;
+  --snow-text-3: #8089A0;
+  --snow-warn: #FBBF24;
+  --snow-ok: #86EFAC;
+
+  /* Orb state hues */
+  --snow-state-sleeping: #64748B;
+  --snow-state-listening: #67E8F9;
+  --snow-state-thinking: #A78BFA;
+  --snow-state-speaking: #F0ABFC;
+  --snow-state-muted: #F87171;
+  --snow-state-offline: #8089A0;
+
+  /* Spacing: xs sm md lg xl 2xl 3xl */
+  --snow-space-xs: 4px;
+  --snow-space-sm: 8px;
+  --snow-space-md: 16px;
+  --snow-space-lg: 24px;
+  --snow-space-xl: 32px;
+  --snow-space-2xl: 48px;
+  --snow-space-3xl: 64px;
+
+  /* Radius: cards, buttons and inputs, chips and caption pill */
+  --snow-radius-card: 12px;
+  --snow-radius-button: 8px;
+  --snow-radius-pill: 9999px;
+
+  /* Type: four sizes, two weights */
+  --snow-size-body: 14px;
+  --snow-size-label: 12px;
+  --snow-size-heading: 20px;
+  --snow-size-display: 28px;
+  --snow-weight-regular: 400;
+  --snow-weight-semibold: 600;
+  --snow-leading-body: 1.5;
+  --snow-leading-heading: 1.2;
+  --snow-font-ui: "Inter Variable", system-ui, sans-serif;
+  --snow-font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Motion */
+  --snow-duration-fast: 120ms;
+  --snow-duration-base: 200ms;
+  --snow-duration-slow: 400ms;
+  --snow-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Tailwind's own scale points at the tokens, so utilities like text-sm resolve to the variables. */
+@theme inline {
+  --font-sans: var(--snow-font-ui);
+  --font-mono: var(--snow-font-mono);
+  --text-xs: var(--snow-size-label);
+  --text-xs--line-height: var(--snow-leading-body);
+  --text-sm: var(--snow-size-body);
+  --text-sm--line-height: var(--snow-leading-body);
+  --text-xl: var(--snow-size-heading);
+  --text-xl--line-height: var(--snow-leading-heading);
+}
+
+body {
+  margin: 0;
+  background: var(--snow-bg);
+  color: var(--snow-text);
+  font-family: var(--snow-font-ui);
+  font-size: var(--snow-size-body);
+  font-weight: var(--snow-weight-regular);
+  line-height: var(--snow-leading-body);
+}
+
+/* The 2px focus ring is never removed (UI-SPEC accessibility). */
+:focus-visible {
+  outline: 2px solid var(--snow-accent);
+  outline-offset: 2px;
+}
