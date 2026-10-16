@@ -1,0 +1,38 @@
+# Voice worker settings (CORE-04). Read by `python -m snow.voice`.
+
+[audio]
+input_device = ""    # empty = the Windows default microphone
+sample_rate = 16000
+frame_samples = 1280 # 80 ms; the frame size openWakeWord expects
+
+[wake]
+# Pretrained stand-in until the "hey snow" model is trained (D-41, plan 01-30).
+model = "hey_jarvis"
+threshold = 0.5
+patience_frames = 2
+preroll_frames = 4   # 4 x 80 ms of RAM-only audio before the hit joins the turn (D-09)
+refractory_s = 1.5
+# Leading wake phrase and common ASR mishearings, stripped from the transcript.
+strip_patterns = [
+    '^\W*(?:hey|hay|hi|hello|ok|okay|a|hate|hey,? a)[\s,.!?-]*(?:jarvis|jervis|jarvus|jarves|jarvas|service)\b[\s,.!?:;-]*',
+    '^\W*(?:jarvis|jervis)\b[\s,.!?:;-]*',
+]
+
+[turn]
+vad_threshold = 0.5
+start_secs = 0.2
+stop_secs = 0.2
+max_silence_secs = 3.0
+max_turn_secs = 30
+wake_alone_window_s = 1.0
+barge_in_min_ms = 250  # used by plan 01-29
+
+[conversation]
+silence_timeout_s = 45  # inside D-08's 30-60 s; used by plan 01-18
+
+[stt.groq]
+base_url = "https://api.groq.com/openai/v1"
+key_name = "groq"
+model = "whisper-large-v3-turbo"
+language = "en"
+timeout_s = 8
