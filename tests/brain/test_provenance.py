@@ -98,6 +98,7 @@ async def test_worker_startup_publishes_all_providers_and_three_roles(
 ) -> None:
     memory_keyring.set_password("snow", "groq", "gsk_test")
     memory_keyring.set_password("snow", "experiential", "exp_test")
+    sse_route(routes, "api.groq.com", ["[[content]] Yes."])  # startup ack-pool refill
     published: list[Event] = []
 
     async def collect(ev: Event) -> None:
@@ -106,13 +107,24 @@ async def test_worker_startup_publishes_all_providers_and_three_roles(
     await BrainWorker(collect, client_factory=routes.client_factory).on_snapshot(
         Snapshot()
     )
-    roles = {e.role: e.status for e in published if e.type == "health.role"}
-    assert roles == {
+    # The first health.role per role is the announce row, before any call (plan 01-16
+    # fills the ack pool at startup, so the fast role is used once afterwards).
+    first: dict[str, str] = {}
+    last: dict[str, str] = {}
+    for e in published:
+        if e.type == "health.role":
+            first.setdefault(e.role, e.status)
+            last[e.role] = e.status
+    assert first == {
         "brain": "not_used_yet",
         "fast": "not_used_yet",
         "vision": "not_used_yet",
     }
-    providers = {e.provider: e.status for e in published if e.type == "health.provider"}
+    assert last["fast"] == "active"
+    providers: dict[str, str] = {}
+    for e in published:
+        if e.type == "health.provider":
+            providers.setdefault(e.provider, e.status)  # the announce row
     assert set(providers) == {"experiential", "groq", "google", "nvidia", "openrouter"}
     assert providers["groq"] == "ready" and providers["google"] == "not_configured"
 
