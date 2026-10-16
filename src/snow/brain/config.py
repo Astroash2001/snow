@@ -1,4 +1,4 @@
-"""Typed models.toml / persona.toml (CORE-04). Extras are forbidden: no key fields."""
+"""Typed models.toml (CORE-04). Extras are forbidden: no key fields."""
 
 from typing import Literal, Self
 
@@ -45,7 +45,3 @@ class ModelsConfig(_Strict):
                 if entry.provider not in self.providers:
                     raise ValueError(f"unknown provider {entry.provider!r}")
         return self
-
-
-class PersonaConfig(_Strict):
-    system_prompt: str
