@@ -7,12 +7,9 @@ from snow.config.secrets import get_secret
 from snow.config.settings import load_config
 from snow.logging import configure
 from snow.voice.config import VoiceConfig
-from snow.voice.pipeline import VoicePipeline
+from snow.voice.pipeline import build_pipeline
 from snow.voice.sources import MicSource
 from snow.voice.stt_groq import GroqStt
-from snow.voice.turn import TurnEngine
-from snow.voice.vad import EndOfTurn, VadDetector
-from snow.voice.wake import WakeGate
 
 
 async def _main() -> None:
@@ -21,23 +18,14 @@ async def _main() -> None:
     hub_task = asyncio.create_task(
         client.run()
     )  # heartbeats start as soon as it connects
-    rate = cfg.audio.sample_rate
-    w = cfg.wake
-    pipeline = VoicePipeline(
+    a = cfg.audio
+    pipeline = build_pipeline(
         cfg,
         client,
-        MicSource(cfg.audio.input_device, rate, cfg.audio.frame_samples),
-        WakeGate(
-            w.model,
-            w.threshold,
-            w.patience_frames,
-            w.preroll_frames,
-            w.refractory_s,
-            rate,
-        ),
-        TurnEngine(cfg.turn, VadDetector(rate), EndOfTurn(rate), sample_rate=rate),
+        MicSource(a.input_device, a.sample_rate, a.frame_samples),
         GroqStt(cfg.stt.groq, get_secret),
     )
+    client.on_event = pipeline.on_hub_event
     await pipeline.start()
     try:
         await hub_task
