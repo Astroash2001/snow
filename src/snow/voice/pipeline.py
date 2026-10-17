@@ -8,7 +8,9 @@ import asyncio
 import logging
 import time
 import uuid
+from collections import deque
 from collections.abc import Callable, Coroutine
+from concurrent.futures import Future
 from typing import Any, Literal, Protocol
 
 from snow.contracts.events import (
@@ -22,6 +24,7 @@ from snow.contracts.events import (
     PresenceState,
     ReplyFinal,
     TranscriptFinal,
+    TranscriptPartial,
     TurnCancelled,
     WakeDetected,
 )
@@ -36,9 +39,27 @@ from snow.voice.wake import WakeGate, WakeHit
 
 log = logging.getLogger("snow.voice")
 
+_LEAD_IN_FRAMES = (
+    8  # 640 ms kept so a follow-on turn's first word reaches the local model
+)
+
 
 class Publisher(Protocol):
     async def publish(self, event: Event) -> None: ...
+
+
+class LocalSource(Protocol):
+    """The local streaming speech model (`LocalStt`, or a fake in tests)."""
+
+    def start_turn(self) -> None: ...
+
+    def feed(self, frame: Frame) -> None: ...
+
+    def partial(self) -> str | None: ...
+
+    def finish(self) -> "Future[str]": ...
+
+    def cancel(self) -> None: ...
 
 
 class VoicePipeline:
@@ -51,6 +72,7 @@ class VoicePipeline:
         engine: TurnEngine,
         stt: GroqStt,
         source_name: Literal["voice", "dev"] = "voice",
+        local: LocalSource | None = None,
     ) -> None:
         self._cfg = cfg
         self._hub = hub
@@ -73,6 +95,13 @@ class VoicePipeline:
         self._muted = False
         self._seen_snapshot = False
         self._mic_ok = True
+        # Live words (VOIC-08). Audio thread only: a turn open on the local model, the
+        # last frames (a follow-on turn starts late), samples since the last partial.
+        self._local = local
+        self._local_turn = False
+        self._recent: deque[Frame] = deque(maxlen=_LEAD_IN_FRAMES)
+        self._since_partial = 0
+        self._last_partial = ""
 
     @property
     def waiting_reply(self) -> bool:
@@ -146,6 +175,7 @@ class VoicePipeline:
         self._source.close()
         self._wake.reset()
         self._engine.mute()
+        self._cancel_local()
 
     async def _set_muted(
         self,
@@ -212,11 +242,43 @@ class VoicePipeline:
     # --- audio thread -----------------------------------------------------------
 
     def _on_frame(self, frame: Frame) -> None:
+        self._recent.append(frame)
+        if self._local_turn:
+            self._feed_local(frame)
         hit = self._wake.process(frame)
         if hit is not None:
             self._engine.on_wake(hit)
         else:
             self._engine.feed(frame)
+
+    def _start_local(self, frames: list[Frame]) -> None:
+        if self._local is None or self._local_turn:
+            return
+        self._local_turn = True
+        self._since_partial = 0
+        self._last_partial = ""
+        self._local.start_turn()
+        for frame in frames:
+            self._local.feed(frame)
+
+    def _feed_local(self, frame: Frame) -> None:
+        assert self._local is not None  # noqa: S101 - _local_turn implies it
+        self._local.feed(frame)
+        self._since_partial += len(frame)
+        turn = self._speaking
+        interval = self._cfg.stt.local.partial_interval_ms * self._cfg.audio.sample_rate
+        if turn is None or self._since_partial * 1000 < interval:
+            return  # no turn id before speech is confirmed; partials wait for it
+        self._since_partial = 0
+        text = strip_wake(self._local.partial() or "", self._cfg.wake.strip_patterns)
+        if text and text != self._last_partial:
+            self._last_partial = text
+            self._put(TranscriptPartial, turn_id=turn, text=text)
+
+    def _cancel_local(self) -> None:
+        if self._local is not None and self._local_turn:
+            self._local_turn = False
+            self._local.cancel()
 
     def _put(self, cls: Callable[..., Event], **fields: object) -> None:
         """Audio thread: build an event and queue it on the loop, in order."""
@@ -246,6 +308,7 @@ class VoicePipeline:
         if self._conversation is None:
             self._conversation = uuid.uuid4().hex[:12]
         self._put(WakeDetected, score=hit.score, model=hit.model)
+        self._start_local(hit.preroll)  # the words right after the wake phrase count
 
     def on_conversation_start(self) -> None:
         self._put(ConversationStarted, trigger="wake")
@@ -257,14 +320,17 @@ class VoicePipeline:
 
     def on_turn_start(self, turn_id: str) -> None:
         self._speaking = turn_id
+        self._start_local(list(self._recent))  # a follow-on turn: no wake started it
 
     def on_wake_alone(self) -> None:
+        self._cancel_local()
         self._put(AckRequested)  # D-09: the brain answers from its acknowledgement pool
 
     def on_conversation_end(self, reason: str) -> None:
         if reason == "sleep":
             self._mode = "soft_sleep"  # D-10: mic on, wake phrase only
         self._pending = self._speaking = None
+        self._cancel_local()
         self._put(ConversationEnded, end_reason=reason)
         self._conversation = None
 
@@ -278,8 +344,10 @@ class VoicePipeline:
         correlation = self._conversation
         self._speaking = None
         self._pending = turn_id
+        local = self._local.finish() if self._local and self._local_turn else None
+        self._local_turn = False  # partials stop with the turn
         self._loop.call_soon_threadsafe(
-            self._spawn, self._transcribe(turn_id, correlation, pcm, duration_ms)
+            self._spawn, self._transcribe(turn_id, correlation, pcm, duration_ms, local)
         )
 
     # --- event loop -------------------------------------------------------------
@@ -297,7 +365,12 @@ class VoicePipeline:
             self._engine.reply_finished()
 
     async def _transcribe(
-        self, turn_id: str, correlation: str | None, pcm: bytes, duration_ms: int
+        self,
+        turn_id: str,
+        correlation: str | None,
+        pcm: bytes,
+        duration_ms: int,
+        local: "Future[str] | None" = None,
     ) -> None:
         try:
             raw = await self._stt.transcribe(pcm, self._cfg.audio.sample_rate)
@@ -342,6 +415,7 @@ def build_pipeline(
     source: AudioSource,
     stt: GroqStt,
     source_name: Literal["voice", "dev"] = "voice",
+    local: LocalSource | None = None,
 ) -> VoicePipeline:
     """Real wake gate, VAD and Smart Turn wired to `source` (worker and dev tool)."""
     rate, w = cfg.audio.sample_rate, cfg.wake
@@ -355,4 +429,4 @@ def build_pipeline(
         sample_rate=rate,
         conversation=cfg.conversation,
     )
-    return VoicePipeline(cfg, hub, source, wake, engine, stt, source_name)
+    return VoicePipeline(cfg, hub, source, wake, engine, stt, source_name, local)

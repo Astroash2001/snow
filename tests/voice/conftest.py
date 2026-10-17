@@ -22,7 +22,7 @@ from snow.config.secrets import Secret
 from snow.config.settings import load_config
 from snow.contracts.events import Event, HealthSubsystem, ReplyFinal, TranscriptFinal
 from snow.voice.config import VoiceConfig
-from snow.voice.pipeline import VoicePipeline
+from snow.voice.pipeline import LocalSource, VoicePipeline
 from snow.voice.sources import FileSource, OnFrame
 from snow.voice.stt_groq import GroqStt
 from snow.voice.turn import TurnEngine
@@ -132,6 +132,7 @@ def run_fixture(groq: FakeGroq, wake_models: None) -> RunFixture:
         *,
         replies: bool = False,
         source_factory: SourceFactory = FileSource,
+        local: LocalSource | None = None,
     ) -> Run:
         """`replies`: the hub answers every transcript, so the next turn is heard."""
         groq.text = text
@@ -158,7 +159,7 @@ def run_fixture(groq: FakeGroq, wake_models: None) -> RunFixture:
             transport=httpx2.MockTransport(groq.handler),
         )
         source = source_factory(AUDIO / f"{name}.wav")
-        pipeline = VoicePipeline(cfg, hub, source, wake, engine, stt)
+        pipeline = VoicePipeline(cfg, hub, source, wake, engine, stt, local=local)
         if replies:
             hub.pipeline = pipeline
             source.hold = lambda: pipeline.waiting_reply

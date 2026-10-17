@@ -37,6 +37,14 @@ end = ["that's all", "that is all", "thanks that's all", "thank you that's all",
 sleep = ["go to sleep", "snow go to sleep"]
 mute = ["mute", "snow mute", "mute yourself", "snow mute yourself"]
 
+[stt]
+final_deadline_s = 2.5 # Groq must answer within this, else the local final is used (T-01-38)
+cooldown_s = 60        # a failed Groq is not called again for this long
+
+[stt.local]
+model = "tiny"         # Moonshine streaming; the base size has no streaming build in 0.1.5
+partial_interval_ms = 300
+
 [stt.groq]
 base_url = "https://api.groq.com/openai/v1"
 key_name = "groq"
