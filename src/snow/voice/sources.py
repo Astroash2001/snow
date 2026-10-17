@@ -4,8 +4,10 @@ Audio is only ever held in memory (D-18). Both sources deliver fixed-size int16 
 to one callback on one processing thread, so downstream code is single-threaded.
 """
 
+import ctypes
 import logging
 import queue
+import sys
 import threading
 import time
 import wave
@@ -48,6 +50,23 @@ class _Pump:
             self._on_frame(frame)
         except Exception as e:  # noqa: BLE001 - a deaf worker is worse than a dropped frame
             log.error("frame_failed kind=%s", type(e).__name__)
+
+
+def _com_init() -> bool:
+    """Join COM on the calling thread; True when the caller must CoUninitialize.
+
+    A WASAPI callback stream started from a thread without COM fails on some drivers
+    (Intel Smart Sound mics: "Unanticipated host error", WdmSyncIoctl GLE 0x492).
+    """
+    if sys.platform != "win32":
+        return False
+    hr = ctypes.windll.ole32.CoInitializeEx(None, 0)  # COINIT_MULTITHREADED
+    return hr in (0, 1)  # S_OK or S_FALSE (already joined); both need a matching uninit
+
+
+def _com_uninit() -> None:
+    if sys.platform == "win32":
+        ctypes.windll.ole32.CoUninitialize()
 
 
 def _wasapi_input(name: str) -> int | None:
@@ -134,6 +153,15 @@ class MicSource:
             self.on_health(ok)
 
     def _run(self, pump: _Pump) -> None:
+        com = _com_init()
+        try:
+            self._loop(pump)
+        finally:
+            self._drop_stream()  # close on the opening thread, before leaving COM
+            if com:
+                _com_uninit()
+
+    def _loop(self, pump: _Pump) -> None:
         delay, next_try = _REOPEN_START_S, 0.0
         while not self._stop.is_set():
             if self._lost.is_set():
@@ -145,7 +173,7 @@ class MicSource:
                 try:
                     self._start_stream()
                 except sd.PortAudioError as e:
-                    log.warning("mic_open_failed kind=%s", type(e).__name__)
+                    log.warning("mic_open_failed kind=%s error=%s", type(e).__name__, e)
                     self._report(False)
                     next_try = time.monotonic() + delay
                     delay = min(delay * 2, _REOPEN_MAX_S)

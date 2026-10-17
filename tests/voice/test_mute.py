@@ -262,3 +262,28 @@ def test_mic_reopens_with_backoff_after_open_failure_and_unplug(
     finally:
         mic.close()
     assert not mic.is_open
+
+
+def test_mic_thread_joins_com_before_opening_and_leaves_after_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # WASAPI callback streams fail to start off the main thread without COM.
+    calls: list[tuple[str, str]] = []
+
+    def com_init() -> bool:
+        calls.append(("init", threading.current_thread().name))
+        return True
+
+    monkeypatch.setattr(sources, "_com_init", com_init)
+    monkeypatch.setattr(sources, "_com_uninit", lambda: calls.append(("uninit", "")))
+    monkeypatch.setattr(sources.sd, "InputStream", FakeStream)
+    monkeypatch.setattr(sources, "_wasapi_input", lambda _name: None)
+    FakeStream.fail, FakeStream.live = 0, None
+    mic = MicSource()
+    mic.open(lambda _f: None)
+    try:
+        wait_for(lambda: FakeStream.live is not None)
+        assert calls == [("init", "snow-voice-audio")]
+    finally:
+        mic.close()
+    assert calls[-1] == ("uninit", "")
