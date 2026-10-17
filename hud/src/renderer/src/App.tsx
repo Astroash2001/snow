@@ -7,7 +7,8 @@ import { Presence, STATE_WORDS } from "./components/Presence";
 import { TranscriptView } from "./components/TranscriptView";
 import { VoiceCard } from "./components/VoiceCard";
 import { copy } from "./copy";
-import { installSnowTestHook } from "./orb/renderer";
+import { renderOrbIcon } from "./orb/icon";
+import { installSnowTestHook, type OrbState } from "./orb/renderer";
 import { type Connection, selectAlert, useHud } from "./store";
 import { sendCommand } from "./ws";
 
@@ -61,6 +62,51 @@ function useDashboardVisible(): boolean {
   return visible;
 }
 
+// The shell's tray and menus live in the main process but know nothing of the core: this page owns
+// the one hub socket. It reports what the tray shows (state word, confirmed mute, fault, reachable)
+// and the orb icon, and carries out the menu's commands. It runs while the dashboard is hidden.
+function useChromeBridge(): void {
+  const presence = useHud((s) => s.presence);
+  const muted = useHud((s) => s.muted);
+  const online = useHud((s) => s.connection === "online");
+  const attention = useHud(selectAlert);
+  const orbState: OrbState = online ? presence : "offline";
+  const stateWord = STATE_WORDS[orbState];
+  const mutedConfirmed = online && muted;
+
+  useEffect(() => {
+    window.snow.chrome.sendState({ stateWord, muted: mutedConfirmed, attention, online });
+  }, [stateWord, mutedConfirmed, attention, online]);
+
+  useEffect(() => {
+    let current = true;
+    (async () => {
+      for (const size of [16, 32]) {
+        const icon = await renderOrbIcon(orbState, size, mutedConfirmed);
+        if (!current) return;
+        window.snow.chrome.setIcon(icon);
+      }
+    })().catch(() => undefined); // no icon update is better than a broken page
+    return () => {
+      current = false;
+    };
+  }, [orbState, mutedConfirmed]);
+
+  useEffect(
+    () =>
+      window.snow.chrome.onCommand((command) => {
+        if (command === "quit") return sendCommand({ type: "cmd.app.quit" });
+        if (
+          (command === "mute" || command === "unmute") &&
+          useHud.getState().connection === "online"
+        ) {
+          sendCommand({ type: "cmd.mute.set", muted: command === "mute", by: "tray" });
+        }
+      }),
+    [],
+  );
+}
+
 // The dashboard: presence card on the left, the transcript on the right. Text is always a React
 // text node.
 export function App() {
@@ -71,6 +117,7 @@ export function App() {
   const alert = useHud(selectAlert);
   const announcement = useAnnouncement(connection);
   const visible = useDashboardVisible();
+  useChromeBridge();
   const word = connection === "offline" ? STATE_WORDS.offline : STATE_WORDS[presence];
   // Before the first snapshot and while the socket is down the orb shows its offline style.
   const orbState = connection === "online" ? presence : "offline";

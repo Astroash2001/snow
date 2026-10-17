@@ -12,7 +12,12 @@ interface Window {
       dragEnd: () => void;
       onVisibility: (cb: (visible: boolean) => void) => () => void;
       onCommand: (cb: (command: string) => void) => () => void;
-      sendState: (state: { stateWord: string; muted: boolean; attention: boolean }) => void;
+      sendState: (state: {
+        stateWord: string;
+        muted: boolean;
+        attention: boolean;
+        online: boolean;
+      }) => void;
       setIcon: (dataUrl: string) => void;
     };
   };
