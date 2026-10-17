@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine, Mapping
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
@@ -30,7 +30,6 @@ from snow.contracts.events import (
     TranscriptPartial,
     TtsSpoken,
     TurnCancelled,
-    VoiceStatus,
     WakeDetected,
 )
 from snow.contracts.wire import Command, MuteSet, Snapshot
@@ -41,8 +40,9 @@ from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
 from snow.voice.stt_router import SttRouter
 from snow.voice.tone import ToneAnalyzer
-from snow.voice.tts.base import EngineError, TtsEngine
+from snow.voice.tts.base import EngineName, TtsEngine
 from snow.voice.tts.config import TtsConfig
+from snow.voice.tts.router import VoiceRouter
 from snow.voice.tts.text import SentenceChunker
 from snow.voice.turn import Presence, TurnEngine
 from snow.voice.vad import EndOfTurn, VadDetector
@@ -83,6 +83,7 @@ class _Reply:
     queue: asyncio.Queue[str | None] = field(default_factory=asyncio.Queue[str | None])
     task: "asyncio.Future[None] | None" = None
     emotion: str = "neutral"
+    big_moment: bool = False
     chars: int = 0
     first_audio_ms: int | None = None
     spoke: bool = False  # the first sample has reached the speaker
@@ -99,7 +100,7 @@ class VoicePipeline:
         stt: GroqStt,
         source_name: Literal["voice", "dev"] = "voice",
         local: LocalSource | None = None,
-        tts: TtsEngine | None = None,
+        tts: Mapping[EngineName, TtsEngine] | None = None,
         tts_cfg: TtsConfig | None = None,
         stream_factory: StreamFactory | None = None,
     ) -> None:
@@ -140,10 +141,13 @@ class VoicePipeline:
         self._last_partial = ""
         # Speech output (SPCH-03). Loop thread only, except the three playout callbacks,
         # which hop onto the loop before touching anything here.
-        self._tts = tts
+        self._tts = (
+            VoiceRouter(tts, tts_cfg, self._emit)
+            if tts and tts_cfg is not None
+            else None
+        )
         self._tts_cfg = tts_cfg
         self._stream_factory = stream_factory
-        self._tts_state: Literal["starting", "running", "down"] = "starting"
         self._tts_ready: asyncio.Event
         self._playout: Playout | None = None
         self._chunker = SentenceChunker()
@@ -164,6 +168,7 @@ class VoicePipeline:
         self._publish_health()
         self._router.announce()
         if self._tts is not None:
+            self._tts.start()
             self._spawn(self._load_tts(self._tts))
         self._muted = not listen
         if listen:
@@ -194,23 +199,7 @@ class VoicePipeline:
             detail=None if self._mic_ok else "Microphone unavailable",
         )
         if self._tts is not None:
-            self._emit(
-                HealthSubsystem,
-                name="speech_output",
-                label="Speech output",
-                owner="voice",
-                status=self._tts_state,
-                detail="Voice failed to load" if self._tts_state == "down" else None,
-            )
-            self._emit(
-                VoiceStatus,
-                engine=self._tts.name,
-                voice_name=self._tts.voice_name,
-                voice_role="everyday",
-                credits_remaining=None,
-                cartesia_available=False,
-                cartesia_reason=None,
-            )
+            self._tts.announce(force=True)
 
     def mic_health(self, ok: bool) -> None:
         """Thread-safe: the microphone was lost (False) or reopened (True)."""
@@ -441,23 +430,18 @@ class VoicePipeline:
 
     # --- speech output (SPCH-03, SPCH-04) -------------------------------------------
 
-    async def _load_tts(self, engine: TtsEngine) -> None:
-        assert self._tts_cfg is not None  # noqa: S101 - an engine comes with its config
-        try:
-            await asyncio.to_thread(engine.load)
+    async def _load_tts(self, router: VoiceRouter) -> None:
+        assert self._tts_cfg is not None  # noqa: S101 - a router comes with its config
+        if await router.wait_ready():
             self._playout = Playout(
-                engine.sample_rate,
+                router.sample_rate,
                 self._tts_cfg.playout,
                 on_first_audio=lambda ts_ns: self._hop(self._first_audio),
                 on_level=lambda level: self._hop(self._tts_level, level),
                 on_drained=lambda: self._hop(self._drained),
                 stream_factory=self._stream_factory,
             )
-            self._tts_state = "running"
-        except EngineError:
-            self._tts_state = "down"
-        self._tts_ready.set()
-        self._publish_health()
+        self._tts_ready.set()  # no playout: no voice loaded, replies stay silent
 
     def _hop(self, fn: Callable[..., None], *args: object) -> None:
         """Audio thread -> event loop."""
@@ -494,6 +478,7 @@ class VoicePipeline:
             reply = self._reply
         assert reply is not None  # noqa: S101 - _speak just made it
         reply.emotion = event.emotion
+        reply.big_moment = event.big_moment
         for chunk in self._chunker.flush():
             reply.queue.put_nowait(chunk)
         reply.queue.put_nowait(None)
@@ -511,10 +496,16 @@ class VoicePipeline:
                 self._finish(reply)
                 return
             playout.start_utterance()
-            while (text := await reply.queue.get()) is not None:
-                reply.chars += len(text)
-                async for audio in self._tts.stream(text, reply.emotion):
-                    playout.push(audio)
+
+            async def texts() -> AsyncIterator[str]:
+                while (text := await reply.queue.get()) is not None:
+                    reply.chars += len(text)
+                    yield text
+
+            # The router picks the engine and fails over mid-reply (SPCH-03).
+            await self._tts.speak(
+                texts(), reply.emotion, reply.big_moment, playout.push
+            )
             playout.end_utterance()  # `_drained` follows when the last sample is out
         except Exception as e:  # noqa: BLE001 - a failed voice must not wedge the loop
             log.error("tts_failed kind=%s", type(e).__name__)
@@ -547,7 +538,7 @@ class VoicePipeline:
         if reply.spoke:
             self._emit(
                 TtsSpoken,
-                engine=self._tts.name,
+                engine=self._tts.spoke_with or "pocket_tts",
                 chars=reply.chars,
                 first_audio_ms=reply.first_audio_ms,
             )
@@ -648,7 +639,7 @@ def build_pipeline(
     stt: GroqStt,
     source_name: Literal["voice", "dev"] = "voice",
     local: LocalSource | None = None,
-    tts: TtsEngine | None = None,
+    tts: Mapping[EngineName, TtsEngine] | None = None,
     tts_cfg: TtsConfig | None = None,
     stream_factory: StreamFactory | None = None,
 ) -> VoicePipeline:
