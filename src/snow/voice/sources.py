@@ -23,6 +23,8 @@ Frame = npt.NDArray[np.int16]
 OnFrame = Callable[[Frame], None]
 
 _HOLD_MAX_S = 30.0
+_REOPEN_START_S = 1.0  # microphone reopen backoff: doubles up to the max
+_REOPEN_MAX_S = 30.0
 _SILENCE_TAIL_S = 2.0  # lets the last turn of a recording end like live audio does
 
 
@@ -66,6 +68,12 @@ def _wasapi_input(name: str) -> int | None:
 
 
 class MicSource:
+    """The live microphone; a lost or missing device is retried with backoff.
+
+    `on_health(ok)` is called from the audio thread: False when the stream is lost or
+    cannot open, True once it runs again.
+    """
+
     def __init__(
         self, device: str = "", sample_rate: int = 16000, frame_samples: int = 1280
     ) -> None:
@@ -74,12 +82,14 @@ class MicSource:
         self._frame = frame_samples
         self._q: queue.Queue[Frame] = queue.Queue(maxsize=200)  # 16 s of audio
         self._stop = threading.Event()
+        self._lost = threading.Event()  # the stream ended on its own (unplugged)
         self._stream: sd.InputStream | None = None  # pyright: ignore[reportUnknownMemberType, reportInvalidTypeForm]
         self._thread: threading.Thread | None = None
+        self.on_health: Callable[[bool], None] | None = None
 
     @property
     def is_open(self) -> bool:
-        return self._stream is not None
+        return self._thread is not None
 
     def _callback(self, indata: npt.NDArray[np.int16], *_: object) -> None:
         # PortAudio thread: copy and return, nothing else (Pitfall 10).
@@ -88,45 +98,83 @@ class MicSource:
         except queue.Full:
             log.warning("mic_frame_dropped")
 
-    def open(self, on_frame: OnFrame) -> None:
+    def _start_stream(self) -> None:
         index = _wasapi_input(self._device)
-        pump = _Pump(on_frame)
-        self._stop.clear()
-
-        def run() -> None:
-            while not self._stop.is_set():
-                try:
-                    pump.deliver(self._q.get(timeout=0.1))
-                except queue.Empty:
-                    continue
-
-        self._thread = threading.Thread(
-            target=run, name="snow-voice-audio", daemon=True
-        )
-        self._thread.start()
-        self._stream = sd.InputStream(  # pyright: ignore[reportUnknownMemberType]
+        stream = sd.InputStream(  # pyright: ignore[reportUnknownMemberType]
             samplerate=self._rate,
             channels=1,
             dtype="int16",
             blocksize=self._frame,
             device=index,
             callback=self._callback,
+            finished_callback=self._lost.set,
             # Without auto_convert WASAPI rejects 16 kHz on a 48 kHz device.
             extra_settings=sd.WasapiSettings(auto_convert=True)
             if index is not None
             else None,  # pyright: ignore[reportUnknownMemberType]
         )
-        self._stream.start()
+        try:
+            stream.start()
+        except sd.PortAudioError:
+            stream.close()
+            raise
+        self._stream = stream
+
+    def _drop_stream(self) -> None:
+        stream, self._stream = self._stream, None
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except sd.PortAudioError:
+                log.warning("mic_close_failed")  # the device is gone; nothing to free
+
+    def _report(self, ok: bool) -> None:
+        if self.on_health is not None:
+            self.on_health(ok)
+
+    def _run(self, pump: _Pump) -> None:
+        delay, next_try = _REOPEN_START_S, 0.0
+        while not self._stop.is_set():
+            if self._lost.is_set():
+                self._lost.clear()
+                self._drop_stream()
+                self._report(False)
+                next_try = time.monotonic() + delay
+            if self._stream is None and time.monotonic() >= next_try:
+                try:
+                    self._start_stream()
+                except sd.PortAudioError as e:
+                    log.warning("mic_open_failed kind=%s", type(e).__name__)
+                    self._report(False)
+                    next_try = time.monotonic() + delay
+                    delay = min(delay * 2, _REOPEN_MAX_S)
+                else:
+                    delay = _REOPEN_START_S
+                    self._report(True)
+            try:
+                pump.deliver(self._q.get(timeout=0.1))
+            except queue.Empty:
+                continue
+
+    def open(self, on_frame: OnFrame) -> None:
+        self._q = queue.Queue(maxsize=200)  # nothing heard before a mute survives it
+        self._stop.clear()
+        self._lost.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            args=(_Pump(on_frame),),
+            name="snow-voice-audio",
+            daemon=True,
+        )
+        self._thread.start()
 
     def close(self) -> None:
         self._stop.set()
-        if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
         if self._thread is not None:
-            self._thread.join(timeout=1)
+            self._thread.join(timeout=2)
             self._thread = None
+        self._drop_stream()
 
 
 def read_wav(path: Path, sample_rate: int) -> npt.NDArray[np.int16]:

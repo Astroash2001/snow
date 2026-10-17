@@ -75,6 +75,12 @@ class WakeGate:
         self._samples = 0
         self._quiet_until = 0
 
+    def reset(self) -> None:
+        """Forget all audio heard so far (no pre-mute audio in a later pre-roll)."""
+        self._ring.clear()
+        self._streak = 0
+        self._model.reset()  # pyright: ignore[reportUnknownMemberType]
+
     def process(self, frame: Frame) -> WakeHit | None:
         self._ring.append(frame)
         self._samples += len(frame)

@@ -55,6 +55,10 @@ class GroqStt:
         self._get_secret = get_secret
         self._transport = transport  # tests inject a fail-closed mock transport
 
+    @property
+    def has_key(self) -> bool:
+        return self._get_secret(self._cfg.key_name) is not None
+
     async def transcribe(self, pcm: bytes, sample_rate: int = 16000) -> str:
         secret = self._get_secret(self._cfg.key_name)
         if secret is None:

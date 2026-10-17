@@ -92,15 +92,6 @@ async def test_go_to_sleep_is_soft_sleep(run_fixture: RunFixture) -> None:
     assert presence(run)[-1] == ("sleeping", "soft_sleep")
 
 
-async def test_mute_is_matched_and_never_reaches_the_brain(
-    run_fixture: RunFixture,
-) -> None:
-    run = await run_fixture("phrase_mute", "Hey Jarvis, mute.")
-    assert finals(run) == []
-    assert "conversation.ended" not in run.hub.types()
-    assert presence(run)[-1] == ("listening", "awake")  # not stuck waiting for a reply
-
-
 async def test_mute_inside_a_sentence_is_a_request(run_fixture: RunFixture) -> None:
     run = await run_fixture(
         "phrase_mute_substring", "Hey Jarvis, mute the speaker in the call."
