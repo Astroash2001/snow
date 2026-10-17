@@ -38,9 +38,19 @@ test("dashboard shows the snapshot, then live rows without a reload", async () =
     ).toBeVisible();
     await expect(word).toHaveText("Thinking");
 
-    // The hub saw a hud hello with the token and the renderer never got a bridge beyond hubInfo.
+    // The hub saw a hud hello with the token and the renderer never got a bridge beyond hubInfo and the window-chrome functions.
     expect(hub.received[0]).toMatchObject({ kind: "hello", role: "hud", token: hub.token });
-    expect(await win.evaluate(() => Object.keys(window.snow))).toEqual(["hubInfo"]);
+    expect(await win.evaluate(() => Object.keys(window.snow))).toEqual(["hubInfo", "chrome"]);
+    expect(await win.evaluate(() => Object.keys(window.snow.chrome))).toEqual([
+      "hover",
+      "click",
+      "drag",
+      "dragEnd",
+      "onVisibility",
+      "onCommand",
+      "sendState",
+      "setIcon",
+    ]);
     expect(await win.evaluate(() => typeof (window as { require?: unknown }).require)).toBe(
       "undefined",
     );
