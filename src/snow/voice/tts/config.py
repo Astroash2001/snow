@@ -16,6 +16,7 @@ class RouterConfig(_Strict):
 
 class PlayoutConfig(_Strict):
     prebuffer_ms: int
+    assume_headphones: bool  # no echo cancellation in v1: barge-in needs headphones
 
 
 class PocketConfig(_Strict):

@@ -12,6 +12,10 @@ cooldown_s = 60.0
 # Local-engine audio starts after this much is buffered. Lower it only if the measured
 # real-time factor of the voice allows (plan 01-26 SUMMARY has the numbers).
 prebuffer_ms = 300
+# VOIC-06: v1 has no echo cancellation, so Snow hears its own voice from speakers and
+# would interrupt itself. Barge-in is built for headphones. Set false (a startup warning
+# is logged) only when playing through speakers.
+assume_headphones = true
 
 [engines.pocket_tts]
 enabled = true

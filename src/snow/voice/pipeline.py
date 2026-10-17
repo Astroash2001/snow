@@ -25,11 +25,13 @@ from snow.contracts.events import (
     PresenceState,
     ReplyDelta,
     ReplyFinal,
+    ReplyInterrupted,
     Tone,
     TranscriptFinal,
     TranscriptPartial,
     TtsSpoken,
     TurnCancelled,
+    TurnTiming,
     WakeDetected,
 )
 from snow.contracts.wire import Command, MuteSet, Snapshot
@@ -40,7 +42,7 @@ from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
 from snow.voice.stt_router import SttRouter
 from snow.voice.tone import ToneAnalyzer
-from snow.voice.tts.base import EngineName, TtsEngine
+from snow.voice.tts.base import EngineName, Samples, TtsEngine
 from snow.voice.tts.config import TtsConfig
 from snow.voice.tts.router import VoiceRouter
 from snow.voice.tts.text import SentenceChunker
@@ -87,6 +89,19 @@ class _Reply:
     chars: int = 0
     first_audio_ms: int | None = None
     spoke: bool = False  # the first sample has reached the speaker
+    # Wall-clock marks of this reply's turn (SPCH-04); None where a stage did not occur.
+    vad_stop_ns: int | None = None
+    stt_final_ns: int | None = None
+    llm_first_token_ns: int | None = None
+    tts_first_audio_ns: int | None = None
+    audio_out_first_ns: int | None = None
+    pushed: int = 0  # samples handed to the playout so far
+    # (text, samples pushed before it) per chunk, to tell what was heard if cut off
+    chunks: list[tuple[str, int]] = field(default_factory=list[tuple[str, int]])
+
+    def heard(self, played: int) -> str:
+        """The chunks the speaker had begun by `played` samples (per sentence)."""
+        return " ".join(text for text, start in self.chunks if start < played)
 
 
 class VoicePipeline:
@@ -152,6 +167,10 @@ class VoicePipeline:
         self._playout: Playout | None = None
         self._chunker = SentenceChunker()
         self._reply: _Reply | None = None
+        # Turns whose reply the user cut off: their late deltas must not start it again.
+        self._dropped: deque[str] = deque(maxlen=8)
+        # turn id -> [VAD stop, STT final] wall-clock ns, until its reply takes them
+        self._marks: dict[str, list[int | None]] = {}
 
     @property
     def waiting_reply(self) -> bool:
@@ -167,6 +186,8 @@ class VoicePipeline:
         self._tts_ready = asyncio.Event()
         self._publish_health()
         self._router.announce()
+        if self._tts_cfg is not None and not self._tts_cfg.playout.assume_headphones:
+            log.warning("speakers_without_echo_cancellation barge_in_hears_snow")
         if self._tts is not None:
             self._tts.start()
             self._spawn(self._load_tts(self._tts))
@@ -401,6 +422,16 @@ class VoicePipeline:
     def on_level(self, level: float) -> None:
         self._put(AudioLevel, channel="mic", level=level)
 
+    def on_barge_in(self) -> None:
+        """The user talked over Snow (VOIC-06). Silence first, on this thread; the loop
+        then cancels synthesis and generation and reports what was heard."""
+        playout, played = self._playout, 0
+        if playout is not None:
+            played = playout.played  # abort resets it
+            playout.abort()
+        self._pending = None
+        self._hop(self._interrupt, played)
+
     def on_turn_end(
         self, turn_id: str, pcm: bytes, duration_ms: int, vad_stop_sample: int
     ) -> None:
@@ -408,6 +439,9 @@ class VoicePipeline:
         correlation = self._conversation
         self._speaking = None
         self._pending = turn_id
+        self._marks[turn_id] = [time.time_ns(), None]
+        if len(self._marks) > 16:  # turns answered without a reply leave theirs behind
+            del self._marks[next(iter(self._marks))]
         local = self._local.finish() if self._local and self._local_turn else None
         self._local_turn = False  # partials stop with the turn
         self._loop.call_soon_threadsafe(
@@ -419,6 +453,11 @@ class VoicePipeline:
     async def on_hub_event(self, event: Event) -> None:
         """Hub -> voice: the reply is spoken as it streams in; a finished reply ends the
         wait for its turn (or a wake ack) once played, or at once if silent."""
+        if (
+            isinstance(event, ReplyDelta | ReplyFinal)
+            and event.turn_id in self._dropped
+        ):
+            return  # the user cut this reply off; the brain is stopping it
         if self._tts is not None and not self._muted:
             if isinstance(event, ReplyDelta) and self._pending in (None, event.turn_id):
                 self._speak(event.turn_id, event.text)
@@ -436,7 +475,7 @@ class VoicePipeline:
             self._playout = Playout(
                 router.sample_rate,
                 self._tts_cfg.playout,
-                on_first_audio=lambda ts_ns: self._hop(self._first_audio),
+                on_first_audio=lambda ts_ns: self._hop(self._first_audio, ts_ns),
                 on_level=lambda level: self._hop(self._tts_level, level),
                 on_drained=lambda: self._hop(self._drained),
                 stream_factory=self._stream_factory,
@@ -456,6 +495,9 @@ class VoicePipeline:
         reply = self._reply = _Reply(
             turn_id, time.monotonic(), waited=self._pending is not None
         )
+        reply.llm_first_token_ns = time.time_ns()
+        vad_stop, stt_final = self._marks.pop(turn_id or "", [None, None])
+        reply.vad_stop_ns, reply.stt_final_ns = vad_stop, stt_final
         task = reply.task = asyncio.ensure_future(self._run_reply(reply))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -500,12 +542,16 @@ class VoicePipeline:
             async def texts() -> AsyncIterator[str]:
                 while (text := await reply.queue.get()) is not None:
                     reply.chars += len(text)
+                    reply.chunks.append((text, reply.pushed))
                     yield text
 
+            def push(audio: Samples) -> None:
+                reply.tts_first_audio_ns = reply.tts_first_audio_ns or time.time_ns()
+                reply.pushed += len(audio)
+                playout.push(audio)
+
             # The router picks the engine and fails over mid-reply (SPCH-03).
-            await self._tts.speak(
-                texts(), reply.emotion, reply.big_moment, playout.push
-            )
+            await self._tts.speak(texts(), reply.emotion, reply.big_moment, push)
             playout.end_utterance()  # `_drained` follows when the last sample is out
         except Exception as e:  # noqa: BLE001 - a failed voice must not wedge the loop
             log.error("tts_failed kind=%s", type(e).__name__)
@@ -513,11 +559,13 @@ class VoicePipeline:
                 playout.abort()
             self._finish(reply)
 
-    def _first_audio(self) -> None:
+    def _first_audio(self, ts_ns: int) -> None:
         reply = self._reply
         if reply is None or reply.spoke:
             return
         reply.spoke = True
+        reply.audio_out_first_ns = ts_ns
+        self._engine.set_speaking(True)  # from here the user can talk over it
         reply.first_audio_ms = int((time.monotonic() - reply.started) * 1000)
         self._emit(PresenceState, state="speaking", mode=self._mode)
 
@@ -535,6 +583,7 @@ class VoicePipeline:
         if self._reply is not reply:
             return
         self._reply = None
+        self._publish_timing(reply)
         if reply.spoke:
             self._emit(
                 TtsSpoken,
@@ -546,12 +595,40 @@ class VoicePipeline:
                 self._emit(PresenceState, state="listening", mode=self._mode)
         self._engine.reply_finished()
 
+    def _interrupt(self, played: int) -> None:
+        """Loop side of a barge-in: end the reply for good, record what was heard."""
+        reply = self._reply
+        if reply is None:  # it ended by itself as the user began to talk
+            return
+        turn_id, heard = reply.turn_id, reply.heard(played)
+        self._stop_speech()
+        self._publish_timing(reply)
+        if turn_id is not None:  # a wake acknowledgement has no turn to cancel
+            self._dropped.append(turn_id)
+            self._emit(TurnCancelled, turn_id=turn_id, cancel_reason="barge_in")
+        self._emit(ReplyInterrupted, turn_id=turn_id, spoken_text=heard)
+
+    def _publish_timing(self, reply: _Reply) -> None:
+        """One `turn.timing` per answered turn (an acknowledgement has no VAD stop)."""
+        if reply.vad_stop_ns is None:
+            return
+        self._emit(
+            TurnTiming,
+            turn_id=reply.turn_id,
+            vad_stop_ns=reply.vad_stop_ns,
+            stt_final_ns=reply.stt_final_ns,
+            llm_first_token_ns=reply.llm_first_token_ns,
+            tts_first_audio_ns=reply.tts_first_audio_ns,
+            audio_out_first_ns=reply.audio_out_first_ns,
+        )
+
     def _stop_speech(self) -> None:
         """Drop the reply being spoken, without a word more (mute, a newer reply)."""
         reply, self._reply = self._reply, None
         self._chunker = SentenceChunker()
         if reply is None:
             return
+        self._engine.set_speaking(False)
         if reply.task is not None:
             reply.task.cancel()
         if self._tts is not None:
@@ -585,6 +662,8 @@ class VoicePipeline:
             log.error("stt_failed kind=%s", type(e).__name__)
             self._release(turn_id)
             return
+        if marks := self._marks.get(turn_id):
+            marks[1] = time.time_ns()
         if self._muted:  # muted while the audio was up there: the turn is void
             return
         text = strip_wake(raw, self._cfg.wake.strip_patterns)
