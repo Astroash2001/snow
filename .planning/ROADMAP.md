@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log
   5. Every change to Snow's repository runs typed, linted, tested CI, and a failing change cannot be merged
 
-**Plans:** 19/33 plans executed
+**Plans:** 21/33 plans executed
 
 Plans:
 **Wave 1**
@@ -71,8 +71,8 @@ Plans:
 - [x] 01-20-PLAN.md — Hard mute that closes the mic, startup mute rule, no-egress and no-disk proofs
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 01-21-PLAN.md — HUD transcript view, mute button, banners and empty states
-- [ ] 01-22-PLAN.md — Moonshine live words and local fallback with the STT router
+- [x] 01-21-PLAN.md — HUD transcript view, mute button, banners and empty states
+- [x] 01-22-PLAN.md — Moonshine live words and local fallback with the STT router
 
 **Wave 8** *(blocked on Wave 7 completion)*
 - [ ] 01-23-PLAN.md — HUD health panel, voice card, dashboard layout and visual baseline
@@ -241,7 +241,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Always-On Voice Loop | 19/33 | In Progress | - |
+| 1. Always-On Voice Loop | 21/33 | In Progress | - |
 | 2. Voice-Driven Claude Code with Safety Gate | 0/TBD | Not started | - |
 | 3. Steerable and Reviewable Agent Work | 0/TBD | Not started | - |
 | 4. Hand-off & Phone | 0/TBD | Not started | - |
