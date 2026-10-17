@@ -55,7 +55,55 @@ export const copy = {
   subsystemFailedHelper: "Could not restart. See logs.",
   notConfigured: "Not configured",
   notConfiguredHelper: "No key stored. Run `snow setup` to add one.",
+
+  // Health card (UI-SPEC "Health"); chip labels are the documented statuses.
+  health: {
+    subsystems: "Subsystems",
+    languageModels: "Language models",
+    noHealthData: "No health data yet",
+    // Slots shown before the first snapshot so the card does not jump when it lands (Phase 1 set).
+    expectedSubsystems: ["Wake word", "Speech to text", "Speech output", "Brain", "Event log"],
+    providerTotal: 5,
+    providersNotConfigured: (n: number, total: number) =>
+      `${n} of ${total} providers not configured`,
+    roles: { brain: "Brain", fast: "Fast", vision: "Vision" },
+  },
+  chip: {
+    running: "Running",
+    starting: "Starting",
+    restarting: "Restarting",
+    down: "Down",
+    active: "Active",
+    ready: "Ready",
+    failing: "Failing",
+    notUsed: "Not used yet",
+    checking: "Checking",
+    fallbackInUse: (n: number, m: number) => `Fallback in use (${n} of ${m})`,
+    coolingUntil: (hhmm: string) => `Cooling down until ${hhmm}`,
+    cooling: "Cooling down",
+  },
+
+  // Voice card (UI-SPEC "Voice card").
+  voiceCard: {
+    voice: "Voice",
+    credits: "Cartesia credits",
+    stt: "Speech-to-text",
+    engines: {
+      pocket_tts: "Pocket TTS",
+      cartesia: "Cartesia",
+      chatterbox: "Chatterbox",
+      kokoro: "Kokoro",
+    },
+    roles: { everyday: "Everyday", big_moment: "Big moment", gpu: "GPU", fallback: "Fallback" },
+    sttSources: { groq: "Groq cloud", local: "Local (Moonshine)" },
+    sttPrimary: "Primary",
+    sttFallback: "Fallback",
+  },
 } as const;
+
+/** Local clock time (HH:MM) for a wall-clock nanosecond timestamp. */
+export const clockTime = (ns: number): string =>
+  new Date(ns / 1e6).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 // SwitchReason on the wire to the words the contract allows; the two configuration faults read as
 // a service error to the user.

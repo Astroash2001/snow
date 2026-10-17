@@ -80,6 +80,19 @@ body {
   line-height: var(--snow-leading-body);
 }
 
+/* A status that changed fades in over the fast token. The element is replaced, not resized, so
+   nothing moves (UI-SPEC Health: 120 ms cross-fade in place). */
+@keyframes snow-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.snow-fade {
+  animation: snow-fade var(--snow-duration-fast) var(--snow-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .snow-fade { animation: none; }
+}
+
 /* The 2px focus ring is never removed (UI-SPEC accessibility). */
 :focus-visible {
   outline: 2px solid var(--snow-accent);
