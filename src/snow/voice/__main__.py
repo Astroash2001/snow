@@ -12,6 +12,7 @@ from snow.voice.sources import MicSource
 from snow.voice.stt_groq import GroqStt
 from snow.voice.stt_local import LocalStt
 from snow.voice.tts.base import EngineName, TtsEngine
+from snow.voice.tts.cartesia import CartesiaEngine
 from snow.voice.tts.config import TtsConfig
 from snow.voice.tts.kokoro import KokoroEngine
 from snow.voice.tts.pocket import PocketEngine
@@ -29,6 +30,7 @@ async def _main() -> None:
     tts_cfg = load_config("tts.toml", TtsConfig)
     engines: dict[EngineName, TtsEngine] = {
         "pocket_tts": PocketEngine(tts_cfg.engines.pocket_tts),
+        "cartesia": CartesiaEngine(tts_cfg.engines.cartesia, get_secret),
         "kokoro": KokoroEngine(tts_cfg.engines.kokoro),
     }
     pipeline = build_pipeline(

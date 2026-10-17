@@ -40,10 +40,27 @@ class SwitchConfig(_Strict):
     enabled: bool  # later plans add their own settings next to this
 
 
+class CartesiaConfig(_Strict):
+    enabled: bool
+    ws_url: str
+    api_base: str  # REST base for the credit-free probe and the optional credits call
+    api_version: str  # sent as the Cartesia-Version header
+    model: str  # a dated snapshot never changes under us
+    voice_id: str  # empty until plan 01-32's audition; then Cartesia is skipped (D-41)
+    voice_name: str
+    key_name: str
+    daily_char_budget: int  # 1 credit is about 1 character; 20,000 a month / 30
+    probe_interval_s: float  # while unavailable, how often the free probe runs
+    credits_url: (
+        str  # empty: Cartesia has no remaining-balance endpoint for a normal key
+    )
+    sample_rate: int
+
+
 class EnginesConfig(_Strict):
     pocket_tts: PocketConfig
     kokoro: KokoroConfig
-    cartesia: SwitchConfig
+    cartesia: CartesiaConfig
     chatterbox: SwitchConfig
 
 
