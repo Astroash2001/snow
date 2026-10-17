@@ -59,8 +59,30 @@ class KokoroConfig(_Strict):
     voices_sha256: str
 
 
-class SwitchConfig(_Strict):
-    enabled: bool  # later plans add their own settings next to this
+class ChatterboxConfig(_Strict):
+    """Chatterbox, the GPU voice (D-33, D-39): only on mains power with an idle GPU."""
+
+    enabled: bool
+    # The isolated environment's interpreter and server, relative to the repo root.
+    python: str
+    server: str
+    min_free_vram_mb: (
+        int  # the GPU must have this much free to start (measured peak + 512)
+    )
+    max_gpu_util: int  # percent; above this the GPU is busy with something else
+    check_interval_s: float  # how often the power and GPU look is repeated
+    unload_after_s: float  # idle this long and the process is stopped to free VRAM
+    load_timeout_s: float  # the model load (first run also downloads the weights)
+    cfg_weight: float
+    default_exaggeration: float
+    # D-06 emotion -> Chatterbox's exaggeration dial (0.25 flat .. 2.0 dramatic).
+    exaggeration: dict[str, float] = {}
+    # Same consent rule as Pocket (D-05). Unset: Pocket's reference when it is an audio
+    # file, else Chatterbox's own default voice.
+    reference: VoiceClip | None = None
+
+    def exaggeration_for(self, emotion: str) -> float:
+        return self.exaggeration.get(emotion, self.default_exaggeration)
 
 
 class CartesiaConfig(_Strict):
@@ -86,7 +108,7 @@ class EnginesConfig(_Strict):
     pocket_tts: PocketConfig
     kokoro: KokoroConfig
     cartesia: CartesiaConfig
-    chatterbox: SwitchConfig
+    chatterbox: ChatterboxConfig
 
 
 class AuditionConfig(_Strict):
