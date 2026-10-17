@@ -1,37 +1,58 @@
+import { MicOff, Moon, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Banner } from "./components/Banner";
+import { MuteButton, toggleMute } from "./components/MuteButton";
 import { Presence, STATE_WORDS } from "./components/Presence";
+import { TranscriptView } from "./components/TranscriptView";
+import { copy } from "./copy";
 import { installSnowTestHook } from "./orb/renderer";
 import { type Connection, useHud } from "./store";
 
 installSnowTestHook();
 
-// Text for the visually hidden role="status" region: "Reconnected" after a lost connection returns.
-// Connection lost is announced by the banner's role="alert".
-function useReconnectedAnnouncement(connection: Connection): string {
+// Text for the visually hidden role="status" region. It says only: muted, unmuted, a subsystem
+// going Down, connection lost, connection restored. The first snapshot after launch announces
+// nothing, and a change that arrives with a reconnect reads as "Reconnected".
+function useAnnouncement(connection: Connection): string {
+  const muted = useHud((s) => s.muted);
+  const downKey = useHud((s) =>
+    s.subsystems
+      .filter((x) => x.status === "down")
+      .map((x) => x.label)
+      .join("|"),
+  );
   const [text, setText] = useState("");
-  const wasLost = useRef(false);
+  const prev = useRef<{ connection: Connection; muted: boolean; down: string[] } | null>(null);
   useEffect(() => {
-    if (connection === "offline") {
-      wasLost.current = true;
-      setText("");
-    } else if (connection === "online" && wasLost.current) {
-      wasLost.current = false;
-      setText("Reconnected");
+    const down = downKey === "" ? [] : downKey.split("|");
+    const before = prev.current;
+    prev.current = { connection, muted, down };
+    if (!before) return;
+    if (connection !== before.connection) {
+      if (connection === "offline") setText(copy.announce.connectionLost);
+      else if (connection === "online" && before.connection === "offline") {
+        setText(copy.announce.reconnected);
+      }
+    } else if (muted !== before.muted) {
+      setText(muted ? copy.announce.muted : copy.announce.unmuted);
+    } else {
+      const added = down.filter((n) => !before.down.includes(n));
+      if (added.length > 0) setText(copy.announce.subsystemDown(added));
     }
-  }, [connection]);
+  }, [connection, muted, downKey]);
   return text;
 }
 
-// Plan 01-21 replaces the row list with the full TranscriptView and moves the banner into the shared
-// Banner component; text is always a React text node.
+// The dashboard: presence card on the left, the transcript on the right. Text is always a React
+// text node.
 export function App() {
   const presence = useHud((s) => s.presence);
+  const mode = useHud((s) => s.mode);
+  const muted = useHud((s) => s.muted);
   const connection = useHud((s) => s.connection);
   const subsystems = useHud((s) => s.subsystems);
   const roles = useHud((s) => s.roles);
-  const rows = useHud((s) => s.rows);
-  const partial = useHud((s) => s.partial);
-  const announcement = useReconnectedAnnouncement(connection);
+  const announcement = useAnnouncement(connection);
   const word = connection === "offline" ? STATE_WORDS.offline : STATE_WORDS[presence];
   // Before the first snapshot and while the socket is down the orb shows its offline style.
   const orbState = connection === "online" ? presence : "offline";
@@ -40,54 +61,50 @@ export function App() {
     subsystems.some((s) => s.status === "down" || s.status === "restarting") ||
     roles.some((r) => r.status === "failing");
   return (
-    <>
+    <div className="flex h-screen flex-col">
       {connection === "offline" && (
-        <div
-          role="alert"
-          data-testid="connection-banner"
-          className="m-4 mb-0 rounded-(--snow-radius-card) border border-(--snow-alert) bg-(--snow-surface) p-4"
+        <Banner icon={XCircle} title={copy.connectionBanner.heading} testId="connection-banner">
+          {copy.connectionBanner.body}
+        </Banner>
+      )}
+      {/* The mute state is only claimed while the core confirms it; offline, the connection banner speaks. */}
+      {connection === "online" && muted && (
+        <Banner
+          icon={MicOff}
+          testId="mute-banner"
+          action={<MuteButton testId="banner-unmute-button" />}
         >
-          <h2 className="text-xl leading-[1.2] font-semibold text-(--snow-text)">
-            Cannot reach Snow's core
-          </h2>
-          <p className="mt-1 text-sm text-(--snow-text-2)">
-            Reconnecting automatically. Mute is unavailable until the connection returns.
-          </p>
-        </div>
+          {copy.muteBanner}
+        </Banner>
       )}
       <div role="status" data-testid="status-region" className="sr-only">
         {announcement}
       </div>
-      <main className="p-4">
+      <main className="flex min-h-0 flex-1 gap-4 p-4">
         <section
           aria-label="Presence"
-          className="flex w-64 flex-col items-center gap-2 rounded-(--snow-radius-card) border border-(--snow-border) bg-(--snow-surface) p-4"
+          className="flex h-fit w-80 shrink-0 flex-col items-center gap-2 rounded-(--snow-radius-card) border border-(--snow-border) bg-(--snow-surface) p-4"
         >
-          <Presence state={orbState} size={192} alert={alert} />
+          <Presence state={orbState} size={192} alert={alert} onClick={toggleMute} />
           <h1
             className="text-(length:--snow-size-display) leading-(--snow-leading-heading) font-semibold"
             data-testid="state-word"
           >
             {word}
           </h1>
-        </section>
-        <ul className="mt-4 space-y-2">
-          {rows.map((row) => (
-            <li key={row.row_id} data-testid={`row-${row.kind}`}>
-              <span className="mr-2 text-xs font-semibold text-(--snow-text-3)">
-                {row.kind === "user" ? "You" : row.kind === "snow" ? "Snow" : "System"}
-              </span>
-              <span>{row.text}</span>
-            </li>
-          ))}
-          {partial && (
-            <li className="text-(--snow-text-2)" data-testid="row-partial">
-              <span className="mr-2 text-xs font-semibold text-(--snow-text-3)">You</span>
-              <span>{partial.text}</span>
-            </li>
+          {connection === "online" && mode === "soft_sleep" && (
+            <span
+              data-testid="mode-chip"
+              className="flex items-center gap-1 rounded-(--snow-radius-pill) border border-(--snow-border) px-2 text-xs text-(--snow-text-2)"
+            >
+              <Moon aria-hidden="true" className="size-3" />
+              {copy.asleepChip}
+            </span>
           )}
-        </ul>
+          <MuteButton />
+        </section>
+        <TranscriptView />
       </main>
-    </>
+    </div>
   );
 }

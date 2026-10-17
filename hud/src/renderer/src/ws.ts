@@ -1,8 +1,19 @@
-import type { Hello } from "../../generated/contracts";
+import type { Command, CommandMsg, Hello } from "../../generated/contracts";
 import { setLevel, TEST_MODE } from "./levels";
 import { useHud, type WireMessage } from "./store";
 
 // The bridge type lives in env.d.ts.
+
+// The socket that has sent its hello, if any. Commands go only through it.
+let live: WebSocket | null = null;
+
+// Sends one command to the hub. While the socket is down this does nothing: the UI disables its
+// controls offline, and a command is never queued to fire later.
+export function sendCommand(command: Command): void {
+  if (live?.readyState !== WebSocket.OPEN) return;
+  const msg: CommandMsg = { kind: "command", command };
+  live.send(JSON.stringify(msg));
+}
 
 export const BACKOFF_MS = [500, 1000, 2000, 4000, 8000]; // the last step repeats
 export const STABLE_AFTER_MS = 60_000; // online this long resets the backoff
@@ -36,6 +47,7 @@ export function connectHub(): () => void {
       openedAt = Date.now();
       const hello: Hello = { kind: "hello", role: "hud", token: info.token, protocol: 1 };
       ws.send(JSON.stringify(hello));
+      live = ws;
     };
     ws.onmessage = (ev) => {
       try {
@@ -54,6 +66,7 @@ export function connectHub(): () => void {
       }
     };
     ws.onclose = () => {
+      if (live === ws) live = null;
       if (socket !== ws) return;
       if (openedAt && Date.now() - openedAt >= STABLE_AFTER_MS) attempt = 0;
       retryLater();
@@ -63,6 +76,7 @@ export function connectHub(): () => void {
   void open();
   return () => {
     stopped = true;
+    live = null;
     clearTimeout(timer);
     socket?.close();
   };
