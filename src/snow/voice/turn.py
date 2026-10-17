@@ -35,7 +35,7 @@ def mic_level(chunk: Pcm) -> float:
 class State(Enum):
     SLEEPING = "sleeping"  # wake only
     AWAKE = "awake"  # a conversation is open
-    MUTED = "muted"  # used by plan 01-20
+    MUTED = "muted"  # the mic is closed; only unmute() leaves it
 
 
 class Vad(Protocol):
@@ -142,11 +142,27 @@ class TurnEngine:
         """Thread-safe: end the open conversation (phrase or sleep command)."""
         self._inbox.append(("end", reason))
 
+    def mute(self) -> None:
+        """Thread-safe: drop any open turn or conversation silently (D-10, VOIC-03)."""
+        self._inbox.append(("mute", ""))
+
+    def unmute(self) -> None:
+        """Thread-safe: back to sleeping, wake phrase only."""
+        self._inbox.append(("unmute", ""))
+
     def drain(self) -> None:
         while self._inbox:
             kind, arg = self._inbox.popleft()
             if kind == "reply":
                 self._reply_done()
+            elif kind == "mute":
+                self._close_turn()
+                self._waiting = False
+                self._rem = np.zeros(0, dtype=np.int16)
+                self.state = State.MUTED
+            elif kind == "unmute":
+                if self.state is State.MUTED:
+                    self.state = State.SLEEPING
             else:
                 self._end(arg)
 
