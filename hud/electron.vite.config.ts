@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
@@ -25,10 +26,21 @@ const cspMeta = {
   ],
 };
 
-// Default entries: src/main/index.ts, src/preload/index.ts, src/renderer/index.html.
+// Default entries: src/main/index.ts, src/preload/index.ts. The renderer has two pages: the
+// dashboard and the mini indicator window.
 // No "type": "module" in package.json, so main and preload build as CommonJS (sandboxed preload needs it).
 export default defineConfig({
   main: {},
   preload: {},
-  renderer: { plugins: [react(), tailwindcss(), cspMeta] },
+  renderer: {
+    plugins: [react(), tailwindcss(), cspMeta],
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, "src/renderer/index.html"),
+          mini: resolve(__dirname, "src/renderer/mini.html"),
+        },
+      },
+    },
+  },
 });

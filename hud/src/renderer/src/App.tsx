@@ -8,7 +8,8 @@ import { TranscriptView } from "./components/TranscriptView";
 import { VoiceCard } from "./components/VoiceCard";
 import { copy } from "./copy";
 import { installSnowTestHook } from "./orb/renderer";
-import { type Connection, useHud } from "./store";
+import { type Connection, selectAlert, useHud } from "./store";
+import { sendCommand } from "./ws";
 
 installSnowTestHook();
 
@@ -45,6 +46,21 @@ function useAnnouncement(connection: Connection): string {
   return text;
 }
 
+// False while the shell has the dashboard hidden. Showing it again asks for a fresh snapshot, so a
+// conversation that went on meanwhile is fully there when the window comes back.
+function useDashboardVisible(): boolean {
+  const [visible, setVisible] = useState(true);
+  useEffect(
+    () =>
+      window.snow.chrome.onVisibility((v) => {
+        setVisible(v);
+        if (v) sendCommand({ type: "cmd.snapshot" });
+      }),
+    [],
+  );
+  return visible;
+}
+
 // The dashboard: presence card on the left, the transcript on the right. Text is always a React
 // text node.
 export function App() {
@@ -52,16 +68,14 @@ export function App() {
   const mode = useHud((s) => s.mode);
   const muted = useHud((s) => s.muted);
   const connection = useHud((s) => s.connection);
-  const subsystems = useHud((s) => s.subsystems);
-  const roles = useHud((s) => s.roles);
+  const alert = useHud(selectAlert);
   const announcement = useAnnouncement(connection);
+  const visible = useDashboardVisible();
   const word = connection === "offline" ? STATE_WORDS.offline : STATE_WORDS[presence];
   // Before the first snapshot and while the socket is down the orb shows its offline style.
   const orbState = connection === "online" ? presence : "offline";
-  // Also covers the silent all-providers-down case (D-41): Snow cannot reply, so the orb says so.
-  const alert =
-    subsystems.some((s) => s.status === "down" || s.status === "restarting") ||
-    roles.some((r) => r.status === "failing");
+  // Hidden: nothing is rendered, so the orb loop stops and the transcript and health trees unmount.
+  if (!visible) return null;
   return (
     <div className="flex h-screen flex-col">
       {connection === "offline" && (

@@ -80,6 +80,13 @@ body {
   line-height: var(--snow-leading-body);
 }
 
+/* The mini indicator window is transparent: only the orb and its pills are drawn. Unlayered, so it
+   beats the layered Tailwind utilities and the plain body rule above. */
+body.snow-mini {
+  background: transparent;
+  overflow: hidden;
+}
+
 /* A status that changed fades in over the fast token. The element is replaced, not resized, so
    nothing moves (UI-SPEC Health: 120 ms cross-fade in place). */
 @keyframes snow-fade {

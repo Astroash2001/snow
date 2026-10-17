@@ -178,6 +178,12 @@ export function reduce(state: HudState, msg: WireMessage): HudState {
   }
 }
 
+// The orb's alert dot (D-41), shared by the dashboard and the mini window: a subsystem is Down or
+// Restarting, or a language-model role is Failing. Also covers the silent all-providers-down case.
+export const selectAlert = (s: HudState): boolean =>
+  s.subsystems.some((x) => x.status === "down" || x.status === "restarting") ||
+  s.roles.some((r) => r.status === "failing");
+
 interface Actions {
   apply: (msg: WireMessage) => void;
   setConnection: (connection: Connection) => void;
