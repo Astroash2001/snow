@@ -170,9 +170,8 @@ class VoiceRouter:
             return big_moment and bool(self._cfg.engines.cartesia.voice_id)
         if name == "chatterbox":
             if (chatterbox := self._chatterbox()) is not None:
-                return (
-                    chatterbox.usable()
-                )  # mains power, an idle GPU and a loaded model
+                # GpuPolicy.allowed() (mains power, an idle GPU) and a loaded model
+                return chatterbox.usable()
             return self._gpu_ok()
         return True
 

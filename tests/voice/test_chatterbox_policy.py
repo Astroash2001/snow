@@ -102,6 +102,7 @@ def policy_for(world: World, clock: Clock | None = None, **changes: Any) -> GpuP
         battery=world.battery,
         smi=world.smi,
         clock=clock or Clock(),
+        sleep=lambda _s: None,
     )
 
 
@@ -150,6 +151,19 @@ def test_a_busy_gpu_is_false_and_our_own_synthesis_is_not_counted() -> None:
     assert policy.refresh() is False and policy.reason == "gpu_busy"
     policy.self_busy = True  # that utilisation is Chatterbox's own
     assert policy.refresh() is True
+
+
+def test_one_spike_of_gpu_use_does_not_count_as_busy() -> None:
+    world = World()
+    spike = CFG.engines.chatterbox.max_gpu_util + 50.0
+    readings = iter([(8000.0, 5.0), (8000.0, spike), (8000.0, 6.0)] * 2)
+    world.smi = lambda: next(readings)  # type: ignore[method-assign]
+    policy = policy_for(world)
+    assert policy.refresh() is True  # the median of 5, spike, 6
+    readings_busy = iter([(8000.0, spike), (8000.0, spike), (8000.0, 5.0)])
+    world.smi = lambda: next(readings_busy)  # type: ignore[method-assign]
+    policy = policy_for(world)
+    assert policy.refresh() is False  # busy in most of the readings
 
 
 def test_the_vram_our_own_process_holds_counts_as_free() -> None:
@@ -250,7 +264,9 @@ def make_engine(
         load_timeout_s=30,
         **changes,
     )
-    policy = GpuPolicy(cfg, battery=world.battery, smi=world.smi, clock=clock)
+    policy = GpuPolicy(
+        cfg, battery=world.battery, smi=world.smi, clock=clock, sleep=lambda _s: None
+    )
     engine = ChatterboxEngine(cfg, policy, stub.parent, reference, clock=clock)
     made.append(engine)
     return engine

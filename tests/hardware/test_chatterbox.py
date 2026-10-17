@@ -32,7 +32,11 @@ async def test_chatterbox_loads_and_speaks_on_the_gpu() -> None:
     cfg = load_config("tts.toml", TtsConfig)
     cb = cfg.engines.chatterbox
     policy = GpuPolicy(cb)
-    if not policy.refresh():
+    for _ in range(12):  # the desktop makes the GPU busy for a moment now and then
+        if policy.refresh():
+            break
+        time.sleep(5)  # noqa: ASYNC251 - nothing else runs in this test
+    else:
         pytest.skip(f"policy is false ({policy.reason}): plug in and let the GPU idle")
     reference = resolve_reference(cb, cfg.engines.pocket_tts)
     engine = ChatterboxEngine(cb, policy, repo_root(), reference)

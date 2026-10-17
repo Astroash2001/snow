@@ -17,7 +17,7 @@ keys, no hub token.
 
 Shortcuts: a reply cut off by barge-in is not aborted inside the server (0.1.7
 generates a whole sentence per call), so the next sentence waits for the one still
-generating; a single GPU-busy sample is enough to stop the server (no hysteresis).
+generating; the GPU look is the median of three readings, with no hysteresis.
 """
 
 import asyncio
@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import shutil
+import statistics
 import struct
 import subprocess
 import threading
@@ -52,6 +53,8 @@ _CONTROL = 0x80000000
 _SPEAK_TIMEOUT_S = 60.0  # one sentence; a server that takes longer is treated as hung
 _RETRY_S = 300.0  # after a failed start, how long before the next attempt
 _COOLDOWN_S = 5.0  # utilisation this soon after our own speech is still ours
+_SAMPLES = 3  # nvidia-smi readings per look; the median counts
+_SAMPLE_GAP_S = 0.25
 _STALE_FACTOR = 3  # allowed() looks again on its own after this many intervals
 _DONE = object()
 # What the server needs to find Python, CUDA and the Hugging Face cache, and no more.
@@ -132,11 +135,13 @@ class GpuPolicy:
         battery: Callable[[], Any] = psutil.sensors_battery,
         smi: Callable[[], tuple[float, float] | None] = _nvidia_smi,
         clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._cfg = cfg
         self._battery = battery
         self._smi = smi
         self._clock = clock
+        self._sleep = sleep
         self._ok = False
         self._reason: SwitchReason | None = "power"
         self._at: float | None = None
@@ -158,7 +163,7 @@ class GpuPolicy:
         if battery is not None and battery.power_plugged is not True:
             self._ok, self._reason = False, "power"
             return False
-        gpu = self._smi()
+        gpu = self._look()
         if gpu is None:
             self.free_mb = None
             self._ok, self._reason = False, "gpu_busy"
@@ -170,6 +175,22 @@ class GpuPolicy:
         )
         self._ok, self._reason = (not busy), ("gpu_busy" if busy else None)
         return self._ok
+
+    def _look(self) -> tuple[float, float] | None:
+        """The median of a few quick readings: the desktop compositor makes the GPU
+        spike for a moment, and one spike must not take the voice away."""
+        looks: list[tuple[float, float]] = []
+        for i in range(_SAMPLES):
+            if i:
+                self._sleep(_SAMPLE_GAP_S)
+            gpu = self._smi()
+            if gpu is None:
+                return None
+            looks.append(gpu)
+        return (
+            statistics.median(g[0] for g in looks),
+            statistics.median(g[1] for g in looks),
+        )
 
     def free_now(self) -> float | None:
         """Free VRAM in MB right now, without changing the policy's answer."""
