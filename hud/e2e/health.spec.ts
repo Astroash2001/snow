@@ -427,3 +427,221 @@ test("below 880 px wide the two columns stack; wider they sit side by side", asy
     expect(narrow.b?.y).toBeGreaterThan(narrow.a?.y ?? 0);
   });
 });
+
+const voiceStatus = (fields: Record<string, unknown> = {}) => ({
+  type: "voice.status",
+  engine: "pocket_tts",
+  voice_name: "Snow",
+  voice_role: "everyday",
+  cartesia_available: true,
+  cartesia_reason: "ok",
+  credits_remaining: 9000,
+  source: "voice",
+  ts_ns: TS,
+  ...fields,
+});
+
+const sttStatus = (fields: Record<string, unknown> = {}) => ({
+  type: "stt.status",
+  stt_source: "groq",
+  status_reason: "primary",
+  retry_after_ns: null,
+  source: "voice",
+  ts_ns: TS,
+  ...fields,
+});
+
+const card = (win: Page) => win.getByTestId("voice-card");
+
+test("before the first voice.status and stt.status the Voice card says Checking", async () => {
+  await withHud({ voice: null, stt: null }, async ({ win, emit }) => {
+    await expect(card(win).getByTestId("status-chip")).toHaveText(["Checking", "Checking"]);
+    await expect(card(win).getByTestId("credits-value")).toHaveText("Checking");
+    emit("voice.status", voiceStatus());
+    emit("stt.status", sttStatus());
+    await expect(card(win).getByTestId("voice-engine")).toHaveText("Pocket TTS");
+    await expect(card(win).getByTestId("stt-source")).toHaveText("Groq cloud");
+  });
+});
+
+test("the Voice card shows the active voice, mono credits with separators and the STT source", async () => {
+  const voice = voiceStatus({ credits_remaining: 12345 }) as unknown as Snapshot["voice"];
+  const stt = sttStatus() as unknown as Snapshot["stt"];
+  await withHud({ voice, stt }, async ({ win, emit }) => {
+    await expect(card(win).getByTestId("voice-engine")).toHaveText("Pocket TTS");
+    await expect(card(win).getByTestId("voice-name")).toHaveText("Snow");
+    await expect(card(win)).toContainText("Everyday");
+    const credits = card(win).getByTestId("credits-value");
+    await expect(credits).toHaveText("12,345");
+    const style = await credits.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { font: s.fontFamily, nums: s.fontVariantNumeric, color: s.color };
+    });
+    expect(style.font).toContain("JetBrains Mono");
+    expect(style.nums).toContain("tabular-nums");
+    expect(style.color).toBe("rgb(230, 234, 242)");
+    await expect(card(win).getByTestId("stt-source")).toHaveText("Groq cloud");
+    await expect(card(win)).toContainText("Primary");
+
+    // Below 10% of the 20,000 free credits the number turns warn.
+    const color = () => credits.evaluate((el) => getComputedStyle(el).color);
+    emit("voice.status", voiceStatus({ credits_remaining: 1999 }));
+    await expect(credits).toHaveText("1,999");
+    await expect.poll(color).toBe("rgb(251, 191, 36)");
+    emit("voice.status", voiceStatus({ credits_remaining: 2000 }));
+    await expect.poll(color).toBe("rgb(230, 234, 242)");
+
+    emit("voice.status", voiceStatus({ engine: "cartesia", voice_role: "big_moment" }));
+    await expect(card(win).getByTestId("voice-engine")).toHaveText("Cartesia");
+    await expect(card(win)).toContainText("Big moment");
+    emit("voice.status", voiceStatus({ engine: "chatterbox", voice_role: "gpu" }));
+    await expect(card(win).getByTestId("voice-engine")).toHaveText("Chatterbox");
+    await expect(card(win)).toContainText("GPU");
+    emit("voice.status", voiceStatus({ engine: "kokoro", voice_role: "fallback" }));
+    await expect(card(win).getByTestId("voice-engine")).toHaveText("Kokoro");
+    await expect(card(win).getByTestId("status-chip").first()).toHaveAttribute(
+      "data-kind",
+      "fallback",
+    );
+  });
+});
+
+test("a missing balance reads Unavailable; out of credits and unreachable show their helper", async () => {
+  const voice = voiceStatus({ credits_remaining: null }) as unknown as Snapshot["voice"];
+  await withHud({ voice }, async ({ win, emit }) => {
+    const credits = card(win).getByTestId("credits-value");
+    const helper = card(win).getByTestId("credits-helper");
+    await expect(credits).toHaveText("Unavailable");
+    await expect(helper).toHaveText("Cartesia did not report a balance.");
+
+    emit(
+      "voice.status",
+      voiceStatus({
+        credits_remaining: 0,
+        cartesia_available: false,
+        cartesia_reason: "out_of_credits",
+      }),
+    );
+    await expect(credits).toHaveText("0");
+    await expect(helper).toHaveText(
+      "Cartesia credits are used up. Big moments use the everyday voice.",
+    );
+
+    emit(
+      "voice.status",
+      voiceStatus({
+        credits_remaining: 5000,
+        cartesia_available: false,
+        cartesia_reason: "unreachable",
+      }),
+    );
+    await expect(credits).toHaveText("5,000");
+    await expect(helper).toHaveText("Cartesia is unreachable. Big moments use the everyday voice.");
+
+    emit("voice.status", voiceStatus());
+    await expect(helper).toHaveCount(0); // recovery is automatic and clears the line
+  });
+});
+
+test("speech-to-text on the local model shows Fallback and why: unreachable, or a limit until a time", async () => {
+  await withHud({ stt: sttStatus() as unknown as Snapshot["stt"] }, async ({ win, emit }) => {
+    const source = card(win).getByTestId("stt-source");
+    const helper = card(win).getByTestId("stt-helper");
+    await expect(helper).toHaveCount(0);
+
+    emit("stt.status", sttStatus({ stt_source: "local", status_reason: "unreachable" }));
+    await expect(source).toHaveText("Local (Moonshine)");
+    await expect(card(win)).toContainText("Fallback");
+    await expect(helper).toHaveText("Groq speech-to-text is unreachable. Using the local model.");
+
+    const until = TS + 90e9;
+    emit(
+      "stt.status",
+      sttStatus({ stt_source: "local", status_reason: "rate_limited", retry_after_ns: until }),
+    );
+    const hhmm = await win.evaluate(
+      (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      until / 1e6,
+    );
+    await expect(helper).toHaveText(
+      `Groq speech-to-text limit reached. Using the local model until ${hhmm}.`,
+    );
+
+    emit("stt.status", sttStatus());
+    await expect(source).toHaveText("Groq cloud");
+    await expect(helper).toHaveCount(0);
+  });
+});
+
+test("a long voice name stays on one line with an end ellipsis and the full name in title", async () => {
+  const name =
+    "An extraordinarily long voice name that would never fit on a single line of the card";
+  const voice = voiceStatus({ voice_name: name }) as unknown as Snapshot["voice"];
+  await withHud({ voice }, async ({ win }) => {
+    const el = card(win).getByTestId("voice-name");
+    await expect(el).toHaveAttribute("title", name);
+    const s = await el.evaluate((e) => {
+      const c = getComputedStyle(e);
+      return {
+        overflow: c.textOverflow,
+        white: c.whiteSpace,
+        clipped: e.scrollWidth > e.clientWidth,
+      };
+    });
+    expect(s).toEqual({ overflow: "ellipsis", white: "nowrap", clipped: true });
+  });
+});
+
+test("Tab visits Mute, the orb, the role disclosures, then Jump to latest, with the focus ring on", async () => {
+  const rows: Snapshot["rows"] = Array.from({ length: 40 }, (_, i) => ({
+    kind: "user",
+    row_id: `r${i}`,
+    text: `line ${i} `.repeat(20),
+    system_event: null,
+    ts_ns: TS + i,
+    turn_id: `t${i}`,
+    interrupted: false,
+  }));
+  await withHud({ ...HEALTHY, rows }, async ({ win }) => {
+    await win
+      .getByTestId("transcript-log")
+      .locator("..")
+      .evaluate((el) => {
+        el.scrollTop = 0;
+      });
+    await expect(win.getByTestId("jump-to-latest")).toBeVisible();
+    const focused = () =>
+      win.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        const ring = el ? getComputedStyle(el) : null;
+        return {
+          id:
+            el?.getAttribute("data-testid") ??
+            el?.getAttribute("aria-controls") ??
+            el?.getAttribute("aria-label"),
+          ring: ring
+            ? [ring.outlineStyle, ring.outlineWidth, ring.outlineOffset, ring.outlineColor]
+            : null,
+        };
+      });
+    const seen: Array<string | null | undefined> = [];
+    for (let i = 0; i < 7; i++) {
+      await win.keyboard.press("Tab");
+      const f = await focused();
+      seen.push(f.id);
+      // 2 px ring, 2 px offset, accent colour (the px values scale with the display, so compare them).
+      expect([f.ring?.[0], f.ring?.[3]]).toEqual(["solid", "rgb(103, 232, 249)"]);
+      expect(f.ring?.[1]).toBe(f.ring?.[2]);
+      expect(Number.parseFloat(f.ring?.[1] ?? "0")).toBeGreaterThan(0);
+    }
+    expect(seen).toEqual([
+      "mute-button",
+      expect.stringMatching(/^Snow, /),
+      "role-chain-brain",
+      "role-chain-fast",
+      "role-chain-vision",
+      null, // the scrolled transcript itself, focusable so the keyboard can scroll it
+      "jump-to-latest",
+    ]);
+  });
+});

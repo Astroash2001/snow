@@ -5,6 +5,7 @@ import { HealthPanel } from "./components/HealthPanel";
 import { MuteButton, toggleMute } from "./components/MuteButton";
 import { Presence, STATE_WORDS } from "./components/Presence";
 import { TranscriptView } from "./components/TranscriptView";
+import { VoiceCard } from "./components/VoiceCard";
 import { copy } from "./copy";
 import { installSnowTestHook } from "./orb/renderer";
 import { type Connection, useHud } from "./store";
@@ -82,31 +83,44 @@ export function App() {
         {announcement}
       </div>
       <main className="flex min-h-0 flex-1 gap-4 p-4">
-        <section
-          aria-label="Presence"
-          className="flex h-fit w-80 shrink-0 flex-col items-center gap-2 rounded-(--snow-radius-card) border border-(--snow-border) bg-(--snow-surface) p-4"
-        >
-          <Presence state={orbState} size={192} alert={alert} onClick={toggleMute} />
-          <h1
-            className="text-(length:--snow-size-display) leading-(--snow-leading-heading) font-semibold"
-            data-testid="state-word"
+        {/* DOM order is the Tab order (Mute, orb, role disclosures, Jump to latest); the
+            flex "order" classes put each block where the layout wants it. */}
+        <div className="flex min-h-0 w-80 shrink-0 flex-col gap-4 overflow-y-auto">
+          <section
+            aria-label="Presence"
+            className="flex h-fit shrink-0 flex-col items-center gap-2 rounded-(--snow-radius-card) border border-(--snow-border) bg-(--snow-surface) p-4"
           >
-            {word}
-          </h1>
-          {connection === "online" && mode === "soft_sleep" && (
-            <span
-              data-testid="mode-chip"
-              className="flex items-center gap-1 rounded-(--snow-radius-pill) border border-(--snow-border) px-2 text-xs text-(--snow-text-2)"
+            <div className="order-4">
+              <MuteButton />
+            </div>
+            <div className="order-1">
+              <Presence state={orbState} size={192} alert={alert} onClick={toggleMute} />
+            </div>
+            <h1
+              className="order-2 text-(length:--snow-size-display) leading-(--snow-leading-heading) font-semibold"
+              data-testid="state-word"
             >
-              <Moon aria-hidden="true" className="size-3" />
-              {copy.asleepChip}
-            </span>
-          )}
-          <MuteButton />
-        </section>
+              {word}
+            </h1>
+            {connection === "online" && mode === "soft_sleep" && (
+              <span
+                data-testid="mode-chip"
+                className="order-3 flex items-center gap-1 rounded-(--snow-radius-pill) border border-(--snow-border) px-2 text-xs text-(--snow-text-2)"
+              >
+                <Moon aria-hidden="true" className="size-3" />
+                {copy.asleepChip}
+              </span>
+            )}
+          </section>
+          <VoiceCard />
+        </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-          <TranscriptView />
-          <HealthPanel />
+          <div className="order-2 shrink-0">
+            <HealthPanel />
+          </div>
+          <div className="order-1 flex min-h-60 flex-1 flex-col">
+            <TranscriptView />
+          </div>
         </div>
       </main>
     </div>
