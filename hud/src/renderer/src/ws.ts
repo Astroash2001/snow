@@ -1,4 +1,5 @@
 import type { Hello } from "../../generated/contracts";
+import { setLevel, TEST_MODE } from "./levels";
 import { useHud, type WireMessage } from "./store";
 
 // The bridge type lives in env.d.ts.
@@ -38,7 +39,16 @@ export function connectHub(): () => void {
     };
     ws.onmessage = (ev) => {
       try {
-        apply(JSON.parse(String(ev.data)) as WireMessage);
+        const msg = JSON.parse(String(ev.data)) as WireMessage;
+        if ("event" in msg) {
+          // About 31 levels a second go to a ref the orb reads, never through React state.
+          if (msg.event.type === "audio.level") return setLevel(msg.event.channel, msg.event.level);
+          // Perf marks for the event-to-paint budget (HUD-03); only in test runs.
+          if (TEST_MODE && msg.event.type === "presence.state") {
+            performance.mark(`evt:${msg.event.seq}`);
+          }
+        }
+        apply(msg);
       } catch {
         // A frame that is not JSON is ignored; the hub only sends valid frames.
       }

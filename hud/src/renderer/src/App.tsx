@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { type Connection, type HudState, useHud } from "./store";
+import { Presence, STATE_WORDS } from "./components/Presence";
+import { installSnowTestHook } from "./orb/renderer";
+import { type Connection, useHud } from "./store";
 
-const WORDS: Record<HudState["presence"], string> = {
-  sleeping: "Standing by",
-  listening: "Listening",
-  thinking: "Thinking",
-  speaking: "Speaking",
-  muted: "Muted",
-};
+installSnowTestHook();
 
 // Text for the visually hidden role="status" region: "Reconnected" after a lost connection returns.
 // Connection lost is announced by the banner's role="alert".
@@ -31,10 +27,18 @@ function useReconnectedAnnouncement(connection: Connection): string {
 export function App() {
   const presence = useHud((s) => s.presence);
   const connection = useHud((s) => s.connection);
+  const subsystems = useHud((s) => s.subsystems);
+  const roles = useHud((s) => s.roles);
   const rows = useHud((s) => s.rows);
   const partial = useHud((s) => s.partial);
   const announcement = useReconnectedAnnouncement(connection);
-  const word = connection === "offline" ? "Reconnecting" : WORDS[presence];
+  const word = connection === "offline" ? STATE_WORDS.offline : STATE_WORDS[presence];
+  // Before the first snapshot and while the socket is down the orb shows its offline style.
+  const orbState = connection === "online" ? presence : "offline";
+  // Also covers the silent all-providers-down case (D-41): Snow cannot reply, so the orb says so.
+  const alert =
+    subsystems.some((s) => s.status === "down" || s.status === "restarting") ||
+    roles.some((r) => r.status === "failing");
   return (
     <>
       {connection === "offline" && (
@@ -55,12 +59,18 @@ export function App() {
         {announcement}
       </div>
       <main className="p-4">
-        <h1
-          className="text-(length:--snow-size-display) leading-(--snow-leading-heading) font-semibold"
-          data-testid="state-word"
+        <section
+          aria-label="Presence"
+          className="flex w-64 flex-col items-center gap-2 rounded-(--snow-radius-card) border border-(--snow-border) bg-(--snow-surface) p-4"
         >
-          {word}
-        </h1>
+          <Presence state={orbState} size={192} alert={alert} />
+          <h1
+            className="text-(length:--snow-size-display) leading-(--snow-leading-heading) font-semibold"
+            data-testid="state-word"
+          >
+            {word}
+          </h1>
+        </section>
         <ul className="mt-4 space-y-2">
           {rows.map((row) => (
             <li key={row.row_id} data-testid={`row-${row.kind}`}>
