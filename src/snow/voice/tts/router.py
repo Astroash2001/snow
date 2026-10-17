@@ -23,6 +23,7 @@ import numpy as np
 from snow.contracts.events import HealthSubsystem, VoiceStatus, VoiceSwitch
 from snow.voice.tts.base import EngineError, EngineName, ErrorKind, Samples, TtsEngine
 from snow.voice.tts.cartesia import CartesiaEngine
+from snow.voice.tts.chatterbox import ChatterboxEngine
 from snow.voice.tts.config import TtsConfig
 
 log = logging.getLogger("snow.voice")
@@ -90,12 +91,14 @@ class VoiceRouter:
         for name in self._order():
             self._state[name] = _LOADING
             self._loads[name] = asyncio.ensure_future(self._load(name))
-        if self._cartesia() is not None:
+        if self._cartesia() is not None or self._chatterbox() is not None:
             self._maintainer = asyncio.ensure_future(self._maintain())
 
     def stop(self) -> None:
         if self._maintainer is not None:
             self._maintainer.cancel()
+        if (chatterbox := self._chatterbox()) is not None:
+            chatterbox.close()  # frees the VRAM; only the process it started
 
     def _cartesia(self) -> CartesiaEngine | None:
         engine = self._engines.get("cartesia")
@@ -103,16 +106,36 @@ class VoiceRouter:
             return engine
         return None
 
+    def _chatterbox(self) -> ChatterboxEngine | None:
+        engine = self._engines.get("chatterbox")
+        if isinstance(engine, ChatterboxEngine) and self._enabled("chatterbox"):
+            return engine
+        return None
+
     async def _maintain(self) -> None:
-        """Cartesia's free probe, credits and warm connection (SPCH-03 failback)."""
-        cartesia = self._cartesia()
-        assert cartesia is not None  # noqa: S101 - start() checked
+        """Cartesia's free probe, credits and warm connection (SPCH-03 failback), and
+        Chatterbox's power and GPU look (D-33)."""
         while True:
             await asyncio.sleep(_MAINTAIN_S)  # first look after start-up has settled
-            try:
-                await cartesia.maintain()
-            except Exception as e:  # noqa: BLE001 - upkeep must never stop the voice
-                log.error("cartesia_upkeep_failed kind=%s", type(e).__name__)
+            if (cartesia := self._cartesia()) is not None:
+                try:
+                    await cartesia.maintain()
+                except Exception as e:  # noqa: BLE001 - upkeep must never stop the voice
+                    log.error("cartesia_upkeep_failed kind=%s", type(e).__name__)
+            if (chatterbox := self._chatterbox()) is not None:
+                try:
+                    reason = await chatterbox.maintain()
+                except Exception as e:  # noqa: BLE001
+                    log.error("chatterbox_upkeep_failed kind=%s", type(e).__name__)
+                    reason = None
+                # The policy turned false: say so once; the next reply uses Pocket.
+                if reason is not None and (now := self._current()) is not None:
+                    self._publish(
+                        VoiceSwitch,
+                        from_engine="chatterbox",
+                        to_engine=now.name,
+                        switch_reason=reason,
+                    )
             self.announce()
 
     def on_snapshot(self, cartesia_chars_today: int) -> None:
@@ -146,6 +169,10 @@ class VoiceRouter:
         if name == "cartesia":  # D-33: only the big emotional moments, with a voice set
             return big_moment and bool(self._cfg.engines.cartesia.voice_id)
         if name == "chatterbox":
+            if (chatterbox := self._chatterbox()) is not None:
+                return (
+                    chatterbox.usable()
+                )  # mains power, an idle GPU and a loaded model
             return self._gpu_ok()
         return True
 
@@ -223,6 +250,8 @@ class VoiceRouter:
             EngineName, str
         ] = {}  # an engine that broke stays out of this reply
         self.spoken = {}
+        if (chatterbox := self._chatterbox()) is not None:
+            chatterbox.touch()  # a reply keeps the GPU voice loaded (or brings it back)
         try:
             async for text in chunks:
                 await self._say(text, emotion, big_moment, push, tried)

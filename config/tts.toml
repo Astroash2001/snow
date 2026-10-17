@@ -95,4 +95,30 @@ credits_url = ""
 sample_rate = 24000
 
 [engines.chatterbox]
-enabled = false   # plan 01-33
+# D-33, D-39: the GPU voice speaks everyday replies only on mains power with the GPU idle
+# and free; otherwise (and always when this process or the GPU fails) Pocket TTS speaks.
+# It runs in its own uv environment and process (engines/chatterbox) and is stopped to free
+# the VRAM the moment the conditions end. Without that environment synced it fails to
+# load once, quietly, and Pocket carries on.
+enabled = true
+python = "engines/chatterbox/.venv/Scripts/python.exe"
+server = "engines/chatterbox/server.py"
+min_free_vram_mb = 3500     # measured peak + 512 MB (plan 01-33 SUMMARY has the numbers)
+max_gpu_util = 30           # percent: above this something else is using the GPU
+check_interval_s = 30       # power and GPU are looked at this often
+unload_after_s = 300        # idle this long and the process is stopped, freeing the VRAM
+load_timeout_s = 300        # first run also downloads the official ResembleAI weights
+cfg_weight = 0.5
+default_exaggeration = 0.5
+# Optional, same consent rule as Pocket (D-05). Unset: Pocket's reference when that is an
+# audio file, else Chatterbox's built-in default voice (a voice shift from Pocket's, D-32).
+# reference = { path = "C:/path/to/my-voice.wav", consent = "self" }
+
+# D-06 emotion -> exaggeration (0.25 flat .. 2.0 dramatic). Not listed: default_exaggeration.
+[engines.chatterbox.exaggeration]
+neutral = 0.5
+content = 0.55
+calm = 0.35
+curious = 0.6
+sympathetic = 0.45
+excited = 0.8

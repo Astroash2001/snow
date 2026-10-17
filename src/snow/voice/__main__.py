@@ -4,7 +4,7 @@ import asyncio
 
 from snow.common.hubclient import HubClient
 from snow.config.secrets import get_secret
-from snow.config.settings import load_config
+from snow.config.settings import load_config, repo_root
 from snow.logging import configure
 from snow.voice.config import VoiceConfig
 from snow.voice.pipeline import build_pipeline
@@ -13,6 +13,7 @@ from snow.voice.stt_groq import GroqStt
 from snow.voice.stt_local import LocalStt
 from snow.voice.tts.base import EngineName, TtsEngine
 from snow.voice.tts.cartesia import CartesiaEngine
+from snow.voice.tts.chatterbox import ChatterboxEngine, GpuPolicy, resolve_reference
 from snow.voice.tts.config import TtsConfig
 from snow.voice.tts.kokoro import KokoroEngine
 from snow.voice.tts.pocket import PocketEngine
@@ -32,6 +33,13 @@ async def _main() -> None:
         "pocket_tts": PocketEngine(tts_cfg.engines.pocket_tts),
         "cartesia": CartesiaEngine(tts_cfg.engines.cartesia, get_secret),
         "kokoro": KokoroEngine(tts_cfg.engines.kokoro),
+        # The GPU voice: its own process, started only while the GpuPolicy allows it.
+        "chatterbox": ChatterboxEngine(
+            tts_cfg.engines.chatterbox,
+            GpuPolicy(tts_cfg.engines.chatterbox),
+            repo_root(),
+            resolve_reference(tts_cfg.engines.chatterbox, tts_cfg.engines.pocket_tts),
+        ),
     }
     pipeline = build_pipeline(
         cfg,
