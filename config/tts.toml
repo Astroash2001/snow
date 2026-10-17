@@ -1,0 +1,27 @@
+# Speech output (SPCH-03, SPCH-04). Typed by snow.voice.tts.config.TtsConfig.
+
+[router]
+# D-33: Cartesia for big moments, Chatterbox only on mains power with the GPU idle,
+# Pocket TTS everyday, Kokoro last. Plan 01-28 reads this; until then only Pocket speaks.
+order = ["cartesia", "chatterbox", "pocket_tts", "kokoro"]
+
+[playout]
+# Local-engine audio starts after this much is buffered. Lower it only if the measured
+# real-time factor of the voice allows (plan 01-26 SUMMARY has the numbers).
+prebuffer_ms = 300
+
+[engines.pocket_tts]
+enabled = true
+# Kyutai preset, a CC0 voice donation (kyutai/tts-voices, voice-donations/Selfie.wav).
+# The user's own voice replaces it in plan 01-32.
+voice = "marius"
+torch_threads = 4
+
+[engines.kokoro]
+enabled = false   # plan 01-28
+
+[engines.cartesia]
+enabled = false   # plan 01-31
+
+[engines.chatterbox]
+enabled = false   # plan 01-33

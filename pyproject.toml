@@ -18,6 +18,7 @@ dependencies = [
     "numpy",
     "soundfile",
     "moonshine-voice==0.1.5",
+    "pocket-tts==3.3.0",
 ]
 
 [project.scripts]

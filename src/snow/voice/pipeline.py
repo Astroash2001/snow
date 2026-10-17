@@ -11,6 +11,7 @@ import uuid
 from collections import deque
 from collections.abc import Callable, Coroutine
 from concurrent.futures import Future
+from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 from snow.contracts.events import (
@@ -22,20 +23,27 @@ from snow.contracts.events import (
     HealthSubsystem,
     MuteChanged,
     PresenceState,
+    ReplyDelta,
     ReplyFinal,
     Tone,
     TranscriptFinal,
     TranscriptPartial,
+    TtsSpoken,
     TurnCancelled,
+    VoiceStatus,
     WakeDetected,
 )
 from snow.contracts.wire import Command, MuteSet, Snapshot
 from snow.voice.config import VoiceConfig
 from snow.voice.phrases import match_command, strip_wake
+from snow.voice.playout import Playout, StreamFactory
 from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
 from snow.voice.stt_router import SttRouter
 from snow.voice.tone import ToneAnalyzer
+from snow.voice.tts.base import EngineError, TtsEngine
+from snow.voice.tts.config import TtsConfig
+from snow.voice.tts.text import SentenceChunker
 from snow.voice.turn import Presence, TurnEngine
 from snow.voice.vad import EndOfTurn, VadDetector
 from snow.voice.wake import WakeGate, WakeHit
@@ -65,6 +73,21 @@ class LocalSource(Protocol):
     def cancel(self) -> None: ...
 
 
+@dataclass
+class _Reply:
+    """One reply being spoken: its text chunks go in `queue`, None ends the reply."""
+
+    turn_id: str | None
+    started: float  # monotonic, when its first text arrived
+    waited: bool  # a turn waits for it, so the engine emits the listening state
+    queue: asyncio.Queue[str | None] = field(default_factory=asyncio.Queue[str | None])
+    task: "asyncio.Future[None] | None" = None
+    emotion: str = "neutral"
+    chars: int = 0
+    first_audio_ms: int | None = None
+    spoke: bool = False  # the first sample has reached the speaker
+
+
 class VoicePipeline:
     def __init__(
         self,
@@ -76,6 +99,9 @@ class VoicePipeline:
         stt: GroqStt,
         source_name: Literal["voice", "dev"] = "voice",
         local: LocalSource | None = None,
+        tts: TtsEngine | None = None,
+        tts_cfg: TtsConfig | None = None,
+        stream_factory: StreamFactory | None = None,
     ) -> None:
         self._cfg = cfg
         self._hub = hub
@@ -112,6 +138,16 @@ class VoicePipeline:
         self._recent: deque[Frame] = deque(maxlen=_LEAD_IN_FRAMES)
         self._since_partial = 0
         self._last_partial = ""
+        # Speech output (SPCH-03). Loop thread only, except the three playout callbacks,
+        # which hop onto the loop before touching anything here.
+        self._tts = tts
+        self._tts_cfg = tts_cfg
+        self._stream_factory = stream_factory
+        self._tts_state: Literal["starting", "running", "down"] = "starting"
+        self._tts_ready: asyncio.Event
+        self._playout: Playout | None = None
+        self._chunker = SentenceChunker()
+        self._reply: _Reply | None = None
 
     @property
     def waiting_reply(self) -> bool:
@@ -124,8 +160,11 @@ class VoicePipeline:
         says it is unmuted (D-10: after a restart the mic never opens by itself)."""
         self._loop = asyncio.get_running_loop()
         self._publisher_task = asyncio.ensure_future(self._publisher())
+        self._tts_ready = asyncio.Event()
         self._publish_health()
         self._router.announce()
+        if self._tts is not None:
+            self._spawn(self._load_tts(self._tts))
         self._muted = not listen
         if listen:
             self._open_source()
@@ -154,6 +193,24 @@ class VoicePipeline:
             status="running" if self._mic_ok else "restarting",
             detail=None if self._mic_ok else "Microphone unavailable",
         )
+        if self._tts is not None:
+            self._emit(
+                HealthSubsystem,
+                name="speech_output",
+                label="Speech output",
+                owner="voice",
+                status=self._tts_state,
+                detail="Voice failed to load" if self._tts_state == "down" else None,
+            )
+            self._emit(
+                VoiceStatus,
+                engine=self._tts.name,
+                voice_name=self._tts.voice_name,
+                voice_role="everyday",
+                credits_remaining=None,
+                cartesia_available=False,
+                cartesia_reason=None,
+            )
 
     def mic_health(self, ok: bool) -> None:
         """Thread-safe: the microphone was lost (False) or reopened (True)."""
@@ -190,6 +247,7 @@ class VoicePipeline:
         self._wake.reset()
         self._engine.mute()
         self._cancel_local()
+        self._stop_speech()
 
     async def _set_muted(
         self,
@@ -237,6 +295,9 @@ class VoicePipeline:
 
     async def stop(self) -> None:
         self._source.close()
+        self._stop_speech()
+        if self._playout is not None:
+            self._playout.close()
         for task in [self._publisher_task, *self._tasks]:
             task.cancel()
 
@@ -367,10 +428,145 @@ class VoicePipeline:
     # --- event loop -------------------------------------------------------------
 
     async def on_hub_event(self, event: Event) -> None:
-        """Hub -> voice: a finished reply ends the wait for its turn (or a wake ack)."""
+        """Hub -> voice: the reply is spoken as it streams in; a finished reply ends the
+        wait for its turn (or a wake ack) once played, or at once if silent."""
+        if self._tts is not None and not self._muted:
+            if isinstance(event, ReplyDelta) and self._pending in (None, event.turn_id):
+                self._speak(event.turn_id, event.text)
+            elif isinstance(event, ReplyFinal) and self._speak_final(event):
+                return
         if isinstance(event, ReplyFinal) and self._pending in (None, event.turn_id):
             self._pending = None  # frees a paced file replay before the engine drains
             self._engine.reply_finished()
+
+    # --- speech output (SPCH-03, SPCH-04) -------------------------------------------
+
+    async def _load_tts(self, engine: TtsEngine) -> None:
+        assert self._tts_cfg is not None  # noqa: S101 - an engine comes with its config
+        try:
+            await asyncio.to_thread(engine.load)
+            self._playout = Playout(
+                engine.sample_rate,
+                self._tts_cfg.playout,
+                on_first_audio=lambda ts_ns: self._hop(self._first_audio),
+                on_level=lambda level: self._hop(self._tts_level, level),
+                on_drained=lambda: self._hop(self._drained),
+                stream_factory=self._stream_factory,
+            )
+            self._tts_state = "running"
+        except EngineError:
+            self._tts_state = "down"
+        self._tts_ready.set()
+        self._publish_health()
+
+    def _hop(self, fn: Callable[..., None], *args: object) -> None:
+        """Audio thread -> event loop."""
+        assert self._loop is not None  # noqa: S101
+        self._loop.call_soon_threadsafe(fn, *args)
+
+    def _begin(self, turn_id: str | None) -> _Reply:
+        reply = self._reply
+        if reply is not None and reply.turn_id == turn_id:
+            return reply
+        self._stop_speech()  # a newer reply replaces the one still playing
+        reply = self._reply = _Reply(
+            turn_id, time.monotonic(), waited=self._pending is not None
+        )
+        task = reply.task = asyncio.ensure_future(self._run_reply(reply))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return reply
+
+    def _speak(self, turn_id: str | None, text: str) -> None:
+        reply = self._begin(turn_id)
+        for chunk in self._chunker.feed(text):
+            reply.queue.put_nowait(chunk)
+
+    def _speak_final(self, event: ReplyFinal) -> bool:
+        """Close the reply's text. False when there is nothing to say (D-41: silent)."""
+        if self._pending not in (None, event.turn_id):
+            return False
+        reply = self._reply
+        if reply is None or reply.turn_id != event.turn_id:
+            if not event.text.strip():
+                return False
+            self._speak(event.turn_id, event.text)  # no deltas came: say the final text
+            reply = self._reply
+        assert reply is not None  # noqa: S101 - _speak just made it
+        reply.emotion = event.emotion
+        for chunk in self._chunker.flush():
+            reply.queue.put_nowait(chunk)
+        reply.queue.put_nowait(None)
+        self._pending = None  # the reply is ours now: the end of playback ends the wait
+        return True
+
+    async def _run_reply(self, reply: _Reply) -> None:
+        assert self._tts is not None  # noqa: S101
+        await self._tts_ready.wait()
+        playout = self._playout
+        try:
+            if playout is None:  # the voice did not load: stay silent, never block
+                while await reply.queue.get() is not None:
+                    pass
+                self._finish(reply)
+                return
+            playout.start_utterance()
+            while (text := await reply.queue.get()) is not None:
+                reply.chars += len(text)
+                async for audio in self._tts.stream(text, reply.emotion):
+                    playout.push(audio)
+            playout.end_utterance()  # `_drained` follows when the last sample is out
+        except Exception as e:  # noqa: BLE001 - a failed voice must not wedge the loop
+            log.error("tts_failed kind=%s", type(e).__name__)
+            if playout is not None:
+                playout.abort()
+            self._finish(reply)
+
+    def _first_audio(self) -> None:
+        reply = self._reply
+        if reply is None or reply.spoke:
+            return
+        reply.spoke = True
+        reply.first_audio_ms = int((time.monotonic() - reply.started) * 1000)
+        self._emit(PresenceState, state="speaking", mode=self._mode)
+
+    def _tts_level(self, level: float) -> None:
+        if self._reply is not None and self._reply.spoke:
+            self._emit(AudioLevel, channel="tts", level=level)
+
+    def _drained(self) -> None:
+        if self._reply is not None:
+            self._finish(self._reply)
+
+    def _finish(self, reply: _Reply) -> None:
+        """Playback is over (or there was none): listen again, report what was said."""
+        assert self._tts is not None  # noqa: S101
+        if self._reply is not reply:
+            return
+        self._reply = None
+        if reply.spoke:
+            self._emit(
+                TtsSpoken,
+                engine=self._tts.name,
+                chars=reply.chars,
+                first_audio_ms=reply.first_audio_ms,
+            )
+            if not reply.waited:  # no turn is waiting, so the engine will not say it
+                self._emit(PresenceState, state="listening", mode=self._mode)
+        self._engine.reply_finished()
+
+    def _stop_speech(self) -> None:
+        """Drop the reply being spoken, without a word more (mute, a newer reply)."""
+        reply, self._reply = self._reply, None
+        self._chunker = SentenceChunker()
+        if reply is None:
+            return
+        if reply.task is not None:
+            reply.task.cancel()
+        if self._tts is not None:
+            self._tts.cancel()
+        if self._playout is not None:
+            self._playout.abort()
 
     def _release(self, turn_id: str) -> None:
         """This turn will get no reply: stop waiting for one."""
@@ -452,6 +648,9 @@ def build_pipeline(
     stt: GroqStt,
     source_name: Literal["voice", "dev"] = "voice",
     local: LocalSource | None = None,
+    tts: TtsEngine | None = None,
+    tts_cfg: TtsConfig | None = None,
+    stream_factory: StreamFactory | None = None,
 ) -> VoicePipeline:
     """Real wake gate, VAD and Smart Turn wired to `source` (worker and dev tool)."""
     rate, w = cfg.audio.sample_rate, cfg.wake
@@ -465,4 +664,16 @@ def build_pipeline(
         sample_rate=rate,
         conversation=cfg.conversation,
     )
-    return VoicePipeline(cfg, hub, source, wake, engine, stt, source_name, local)
+    return VoicePipeline(
+        cfg,
+        hub,
+        source,
+        wake,
+        engine,
+        stt,
+        source_name,
+        local,
+        tts,
+        tts_cfg,
+        stream_factory,
+    )
