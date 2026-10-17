@@ -23,6 +23,7 @@ from snow.contracts.events import (
     MuteChanged,
     PresenceState,
     ReplyFinal,
+    Tone,
     TranscriptFinal,
     TranscriptPartial,
     TurnCancelled,
@@ -34,6 +35,7 @@ from snow.voice.phrases import match_command, strip_wake
 from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
 from snow.voice.stt_router import SttRouter
+from snow.voice.tone import ToneAnalyzer
 from snow.voice.turn import Presence, TurnEngine
 from snow.voice.vad import EndOfTurn, VadDetector
 from snow.voice.wake import WakeGate, WakeHit
@@ -87,6 +89,7 @@ class VoicePipeline:
             has_local=local is not None,
             on_change=self._publish_health,
         )
+        self._tone = ToneAnalyzer(cfg.tone)
         engine.events = self
         self._loop: asyncio.AbstractEventLoop | None = None
         self._q: asyncio.Queue[Event] = asyncio.Queue()
@@ -408,6 +411,9 @@ class VoicePipeline:
         if not text:
             self._release(turn_id)
             return
+        tone = await self._tone_of(pcm, raw)
+        if self._muted:  # muted while the tone was measured
+            return
         await self._q.put(
             TranscriptFinal(
                 ts_ns=time.time_ns(),
@@ -417,8 +423,26 @@ class VoicePipeline:
                 text=text,
                 stt_source=source,
                 duration_ms=duration_ms,
+                tone=tone,
             )
         )
+
+    async def _tone_of(self, pcm: bytes, spoken: str) -> Tone | None:
+        """Tone never delays or breaks a reply: late or failed means no tone (D-35).
+        `spoken` is the unstripped text, so the wake words count toward the pace."""
+        task = asyncio.ensure_future(
+            asyncio.to_thread(
+                self._tone.analyze, pcm, spoken, self._cfg.audio.sample_rate
+            )
+        )
+        try:
+            return await asyncio.wait_for(asyncio.shield(task), self._cfg.tone.wait_s)
+        except TimeoutError:
+            log.warning("tone_late")
+        except Exception as e:  # noqa: BLE001
+            log.warning("tone_failed kind=%s", type(e).__name__)
+        task.add_done_callback(lambda t: t.cancelled() or t.exception())  # no warning
+        return None
 
 
 def build_pipeline(

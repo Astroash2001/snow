@@ -51,3 +51,25 @@ key_name = "groq"
 model = "whisper-large-v3-turbo"
 language = "en"
 timeout_s = 8
+
+[tone]
+# Prosody (loudness, pitch, pace) always runs. The emotion model is off: the only small
+# CPU candidate, thomashallock/emotion2vec-web-distill (FunASR Model License, not
+# permissive; misses most non-calm speech, plan 01-24 spike), stays unpinned. To try it:
+#   model_url = "https://huggingface.co/thomashallock/emotion2vec-web-distill/resolve/566a831be26e64f7e641241c26154793b7dd1428/distill-student-v4.fused.onnx"
+#   model_sha256 = "136b83ee1cbf16b102b341398534604a7f8ddadff1f07b50bc76739fa04a3795"
+#   temperature = 0.0375
+#   labels = [calm, content, warm, happy, amused, excited, surprised, smug, confused,
+#             skeptical, annoyed, disgusted, afraid, angry, tense, sad, weary, bored]
+# then run `uv run python -m snow.voice.tone` once to download and verify it.
+model_url = ""
+model_sha256 = ""
+labels = []
+temperature = 1.0
+min_confidence = 0.4
+loud_offset_db = 6    # above the user's median voiced level
+quiet_offset_db = 8   # below it
+fast_wpm = 170        # absolute pace limits until 3 turns of history exist
+slow_wpm = 110
+ref_loudness_dbfs = -24 # "normal" voiced level until history exists
+wait_s = 0.3          # the transcript waits at most this long for the tone
