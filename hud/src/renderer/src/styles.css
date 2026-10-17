@@ -10,6 +10,7 @@
   --snow-border: #222A3A;
   --snow-accent: #67E8F9;
   --snow-alert: #F87171;
+  --snow-alert-tint: rgba(248, 113, 113, 0.12); /* hard-mute and connection banners */
   --snow-text: #E6EAF2;
   --snow-text-2: #A8B1C5;
   --snow-text-3: #8089A0;

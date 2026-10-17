@@ -10,11 +10,14 @@ const lines = conversationRaw
   .map((l) => JSON.parse(l) as WireMessage);
 
 describe("reduce", () => {
-  it("replays the golden conversation to a cleared, sleeping state", () => {
+  it("replays the golden conversation to a sleeping state with the rows still readable", () => {
     const end = [snapshot, ...lines].reduce(reduce, initialState);
     expect(end.presence).toBe("sleeping");
-    expect(end.rows).toEqual([]);
     expect(end.connection).toBe("online");
+    // conversation.ended keeps the rows for the view to fade out; the view then clears them.
+    expect(end.ended).toBe(true);
+    expect(end.rows.length).toBeGreaterThan(0);
+    expect(end.rows.some((r) => r.kind === "system" && r.system_event === "llm.switch")).toBe(true);
   });
 
   it("builds a You row and a Snow row for a turn, replacing the live Snow text", () => {
@@ -75,6 +78,61 @@ describe("reduce, turn building", () => {
     const cleared = reduce(s, ev("conversation.started"));
     expect(cleared.rows).toEqual([]);
     expect(cleared.partial).toBeNull();
+  });
+
+  it("conversation.ended keeps the rows and drops the partial until the view clears them", () => {
+    const s = reduce(
+      run(ev("transcript.final", { text: "hi" }), ev("transcript.partial", { text: "x" })),
+      ev("conversation.ended"),
+    );
+    expect(s.ended).toBe(true);
+    expect(s.partial).toBeNull();
+    expect(s.rows).toHaveLength(1);
+    expect(reduce(s, ev("conversation.started")).ended).toBe(false);
+  });
+
+  it("a turn with no speech leaves no partial and no row", () => {
+    const partial = run(ev("transcript.partial", { text: "um" }));
+    const blank = reduce(partial, ev("transcript.final", { text: "  " }));
+    expect(blank.rows).toEqual([]);
+    expect(blank.partial).toBeNull();
+    const thinking = reduce(partial, ev("presence.state", { state: "thinking", mode: "awake" }));
+    expect(thinking.partial).toBeNull();
+    expect(reduce(partial, ev("turn.cancelled")).partial).toBeNull();
+    const stillListening = reduce(
+      partial,
+      ev("presence.state", { state: "listening", mode: "awake" }),
+    );
+    expect(stillListening.partial).toEqual(partial.partial);
+  });
+
+  it("marks the Snow row as streaming until the final, and an empty interrupt leaves no row", () => {
+    const live = run(ev("reply.delta", { text: "Hel" }), ev("reply.delta", { text: "lo" }));
+    expect(live.streaming).toBe("snow:t1");
+    expect(reduce(live, ev("reply.final", { text: "Hello" })).streaming).toBeNull();
+    const heard = reduce(live, ev("reply.interrupted", { spoken_text: "Hel" }));
+    expect(heard.rows.map((r) => [r.text, r.interrupted])).toEqual([["Hel", true]]);
+    expect(reduce(live, ev("reply.interrupted", { spoken_text: "" })).rows).toEqual([]);
+  });
+
+  it("llm events become system rows in the hub's key=value shape", () => {
+    const s = run(
+      ev("llm.switch", {
+        role: "brain",
+        from_provider: "a",
+        from_model: "m1",
+        to_provider: "b",
+        to_model: "m2",
+        switch_reason: "rate_limit",
+      }),
+      ev("llm.blocked_privacy", { role: "fast", data_class: "private" }),
+      ev("llm.exhausted", { role: "brain" }),
+    );
+    expect(s.rows.map((r) => [r.kind, r.system_event, r.text])).toEqual([
+      ["system", "llm.switch", "role=brain from=a/m1 to=b/m2 reason=rate_limit"],
+      ["system", "llm.blocked_privacy", "role=fast data_class=private"],
+      ["system", "llm.exhausted", "role=brain"],
+    ]);
   });
 
   it("returns the same state object for an unknown event type", () => {
