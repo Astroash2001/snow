@@ -65,6 +65,22 @@ class SttConfig(_Strict):
     local: LocalSttConfig
 
 
+class ToneConfig(_Strict):
+    """Tone detection (D-35). An empty model_url means prosody only, no emotion."""
+
+    model_url: str = ""
+    model_sha256: str = ""
+    labels: list[str] = []
+    temperature: float = 1.0  # softmax divisor for the model's raw scores
+    min_confidence: float = 0.4
+    loud_offset_db: float = 6.0
+    quiet_offset_db: float = 8.0
+    fast_wpm: float = 170.0
+    slow_wpm: float = 110.0
+    ref_loudness_dbfs: float = -24.0  # "normal" voiced level until history exists
+    wait_s: float = 0.3  # the transcript waits at most this long for the tone
+
+
 class VoiceConfig(_Strict):
     audio: AudioConfig
     wake: WakeConfig
@@ -72,3 +88,4 @@ class VoiceConfig(_Strict):
     conversation: ConversationConfig
     phrases: PhrasesConfig
     stt: SttConfig
+    tone: ToneConfig
