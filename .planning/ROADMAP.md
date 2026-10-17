@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Killing any running Snow subsystem (voice, brain, HUD) brings it back on its own; the HUD shows each subsystem as up or down and makes the hard-mute state unmistakable; every turn is recorded as typed events in the durable event log
   5. Every change to Snow's repository runs typed, linted, tested CI, and a failing change cannot be merged
 
-**Plans:** 27/33 plans executed
+**Plans:** 28/33 plans executed
 
 Plans:
 **Wave 1**
@@ -87,7 +87,7 @@ Plans:
 - [x] 01-28-PLAN.md — Voice router with mid-reply failover and kokoro fallback
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 01-29-PLAN.md — Barge-in and per-turn latency, fake and real-hardware suites
+- [x] 01-29-PLAN.md — Barge-in and per-turn latency, fake and real-hardware suites
 
 **Wave 12** *(blocked on Wave 11 completion)*
 - [ ] 01-30-PLAN.md — "Hey Snow" wake model: recipe, user training (human action), calibrated integration
@@ -241,7 +241,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Always-On Voice Loop | 27/33 | In Progress | - |
+| 1. Always-On Voice Loop | 28/33 | In Progress | - |
 | 2. Voice-Driven Claude Code with Safety Gate | 0/TBD | Not started | - |
 | 3. Steerable and Reviewable Agent Work | 0/TBD | Not started | - |
 | 4. Hand-off & Phone | 0/TBD | Not started | - |
