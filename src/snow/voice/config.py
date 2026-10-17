@@ -1,5 +1,7 @@
 """Typed config/voice.toml (CORE-04). Extras are forbidden: a typo fails at start."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -51,8 +53,16 @@ class GroqConfig(_Strict):
     timeout_s: float
 
 
+class LocalSttConfig(_Strict):
+    model: Literal["tiny", "small", "medium"]  # Moonshine English streaming sizes
+    partial_interval_ms: int
+
+
 class SttConfig(_Strict):
+    final_deadline_s: float  # Groq gets this long, then the local final is used
+    cooldown_s: float  # how long a failed Groq is left alone
     groq: GroqConfig
+    local: LocalSttConfig
 
 
 class VoiceConfig(_Strict):

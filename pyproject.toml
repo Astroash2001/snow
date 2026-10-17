@@ -17,6 +17,7 @@ dependencies = [
     "pywin32==312; sys_platform == 'win32'",
     "numpy",
     "soundfile",
+    "moonshine-voice==0.1.5",
 ]
 
 [project.scripts]
