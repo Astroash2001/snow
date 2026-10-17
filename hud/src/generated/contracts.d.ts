@@ -148,8 +148,10 @@ export type TsNs7 = number;
 export type TurnId7 = string | null;
 export type Type7 = "transcript.final";
 export type UserId7 = string;
+export type BigMoment = boolean;
 export type CausationId8 = number | null;
 export type CorrelationId8 = string | null;
+export type Emotion1 = string | null;
 export type Reason8 = string | null;
 export type Result8 = string | null;
 export type RiskTier8 = "free" | "announce" | "ask" | "always_ask";
@@ -160,10 +162,10 @@ export type TsNs8 = number;
 export type TurnId8 = string | null;
 export type Type8 = "reply.delta";
 export type UserId8 = string;
-export type BigMoment = boolean;
+export type BigMoment1 = boolean;
 export type CausationId9 = number | null;
 export type CorrelationId9 = string | null;
-export type Emotion1 = string;
+export type Emotion2 = string;
 export type Model1 = string | null;
 export type Provider = string | null;
 export type Reason9 = string | null;
@@ -623,8 +625,10 @@ export interface Tone {
   words_per_min: WordsPerMin;
 }
 export interface ReplyDelta {
+  big_moment?: BigMoment;
   causation_id?: CausationId8;
   correlation_id?: CorrelationId8;
+  emotion?: Emotion1;
   reason?: Reason8;
   result?: Result8;
   risk_tier?: RiskTier8;
@@ -637,10 +641,10 @@ export interface ReplyDelta {
   user_id?: UserId8;
 }
 export interface ReplyFinal {
-  big_moment: BigMoment;
+  big_moment: BigMoment1;
   causation_id?: CausationId9;
   correlation_id?: CorrelationId9;
-  emotion: Emotion1;
+  emotion: Emotion2;
   model?: Model1;
   provider?: Provider;
   reason?: Reason9;

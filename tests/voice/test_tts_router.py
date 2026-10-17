@@ -179,11 +179,12 @@ async def test_cartesia_only_for_big_moments_and_chatterbox_only_by_its_policy()
     engines["cartesia"] = FakeEngine("cartesia")
     engines["chatterbox"] = FakeEngine("chatterbox")
     gpu = {"ok": False}
-    router, _bus = make(
-        engines,
-        config(cartesia=True, chatterbox=True),
-        gpu_ok=lambda: gpu["ok"],
+    cfg = config(cartesia=True, chatterbox=True)
+    voiced = cfg.engines.cartesia.model_copy(update={"voice_id": "a-voice"})
+    cfg = cfg.model_copy(
+        update={"engines": cfg.engines.model_copy(update={"cartesia": voiced})}
     )
+    router, _bus = make(engines, cfg, gpu_ok=lambda: gpu["ok"])
     router.start()
     await say(router, "Plain.")
     await say(router, "Big!", big_moment=True)

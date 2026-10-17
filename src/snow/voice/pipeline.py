@@ -243,6 +243,8 @@ class VoicePipeline:
             self._open_source()
         elif self._muted:  # we muted but the hub never heard: tell it, stay closed
             self._emit(MuteChanged, muted=True, by="voice")
+        if self._tts is not None:  # the Cartesia budget starts from the hub's count
+            self._tts.on_snapshot(snap.cartesia_chars_today)
         self._publish_health()
         if snap.stt is None:  # a hub that restarted forgot the source: say it again
             self._router.announce(force=True)
@@ -306,6 +308,8 @@ class VoicePipeline:
     async def stop(self) -> None:
         self._source.close()
         self._stop_speech()
+        if self._tts is not None:
+            self._tts.stop()
         if self._playout is not None:
             self._playout.close()
         for task in [self._publisher_task, *self._tasks]:
@@ -460,7 +464,7 @@ class VoicePipeline:
             return  # the user cut this reply off; the brain is stopping it
         if self._tts is not None and not self._muted:
             if isinstance(event, ReplyDelta) and self._pending in (None, event.turn_id):
-                self._speak(event.turn_id, event.text)
+                self._speak(event.turn_id, event.text, event.emotion, event.big_moment)
             elif isinstance(event, ReplyFinal) and self._speak_final(event):
                 return
         if isinstance(event, ReplyFinal) and self._pending in (None, event.turn_id):
@@ -503,8 +507,18 @@ class VoicePipeline:
         task.add_done_callback(self._tasks.discard)
         return reply
 
-    def _speak(self, turn_id: str | None, text: str) -> None:
+    def _speak(
+        self,
+        turn_id: str | None,
+        text: str,
+        emotion: str | None = None,
+        big_moment: bool = False,
+    ) -> None:
         reply = self._begin(turn_id)
+        # The brain knows both before the first word, so the first chunk already reaches
+        # the right voice (the reply's final event repeats them for late joiners).
+        reply.emotion = emotion or reply.emotion
+        reply.big_moment = reply.big_moment or big_moment
         for chunk in self._chunker.feed(text):
             reply.queue.put_nowait(chunk)
 
@@ -584,13 +598,17 @@ class VoicePipeline:
             return
         self._reply = None
         self._publish_timing(reply)
+        spoken = self._tts.take_spoken()
         if reply.spoke:
-            self._emit(
-                TtsSpoken,
-                engine=self._tts.spoke_with or "pocket_tts",
-                chars=reply.chars,
-                first_audio_ms=reply.first_audio_ms,
-            )
+            # One row per voice that spoke: the hub counts Cartesia's characters.
+            by_voice = spoken or {self._tts.spoke_with or "pocket_tts": reply.chars}
+            for engine, chars in by_voice.items():
+                self._emit(
+                    TtsSpoken,
+                    engine=engine,
+                    chars=chars,
+                    first_audio_ms=reply.first_audio_ms,
+                )
             if not reply.waited:  # no turn is waiting, so the engine will not say it
                 self._emit(PresenceState, state="listening", mode=self._mode)
         self._engine.reply_finished()
@@ -601,6 +619,8 @@ class VoicePipeline:
         if reply is None:  # it ended by itself as the user began to talk
             return
         turn_id, heard = reply.turn_id, reply.heard(played)
+        if self._tts is not None and (n := self._tts.spoken.get("cartesia")):
+            self._emit(TtsSpoken, engine="cartesia", chars=n)  # its credits were spent
         self._stop_speech()
         self._publish_timing(reply)
         if turn_id is not None:  # a wake acknowledgement has no turn to cancel

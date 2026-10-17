@@ -38,7 +38,22 @@ model_sha256 = "6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb
 voices_sha256 = "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
 
 [engines.cartesia]
-enabled = false   # plan 01-31
+# Big moments only (D-33, SPCH-03). Without a stored key, a voice id, credits or a
+# connection the router speaks the big moment in the everyday voice (D-41).
+enabled = true
+ws_url = "wss://api.cartesia.ai/tts/websocket"
+api_base = "https://api.cartesia.ai"
+api_version = "2026-08-14"        # Cartesia-Version header (current in the API reference)
+model = "sonic-3.6-2026-08-27"    # dated snapshot of sonic-3.6, never changes under us
+voice_id = ""                     # plan 01-32's audition fills this; until then no Cartesia
+voice_name = ""
+key_name = "cartesia"
+daily_char_budget = 650           # about 20,000 free credits a month / 30 days
+probe_interval_s = 90             # free GET /voices?limit=1 while Cartesia is unavailable
+# Cartesia has no remaining-balance endpoint: GET /usage/credits reports credits USED and
+# needs an admin key (sk_car_admin_...). Left empty, the HUD shows "Unavailable".
+credits_url = ""
+sample_rate = 24000
 
 [engines.chatterbox]
 enabled = false   # plan 01-33

@@ -16,6 +16,9 @@ import pytest
 from snow.contracts.events import (
     HealthSubsystem,
     PresenceState,
+    ReplyDelta,
+    ReplyFinal,
+    TtsSpoken,
     VoiceStatus,
     VoiceSwitch,
 )
@@ -24,6 +27,7 @@ from snow.voice.tts.config import TtsConfig
 from snow.voice.tts.kokoro import KokoroEngine, _ensure
 from snow.voice.tts.router import VoiceRouter
 from tests.voice.conftest import FakeHub, StubSource, make_pipeline, until
+from tests.voice.test_cartesia import MockCartesia, World, mock  # noqa: F401
 from tests.voice.test_tts_pipeline import (
     TTS_CFG,
     Speaker,
@@ -207,6 +211,79 @@ async def test_every_voice_dying_in_synthesis_ends_the_reply_cleanly() -> None:
 
     assert [h for h in hub.health if h.name == "speech_output"][-1].status == "down"
     assert pipeline._reply is None  # noqa: SLF001
+
+
+# --- cartesia failing mid reply ------------------------------------------------------
+
+
+async def test_cartesia_dying_after_the_first_chunk_finishes_the_reply_in_pocket(
+    mock: MockCartesia,  # noqa: F811
+) -> None:
+    mock.drop_at = 2  # the connection dies as the second sentence is sent
+    w = await World(mock.url).start()
+
+    audio = await say(
+        w.router, "One.", "Two.", "Three.", emotion="excited", big_moment=True
+    )
+
+    assert w.pocket().texts == ["Two.", "Three."]  # One. is not spoken again
+    assert [m["transcript"] for m in mock.received if m["transcript"]] == [
+        "One. ",
+        "Two. ",
+    ]
+    assert len(audio) == 2 + 2  # cartesia's two chunks for One., pocket's for the rest
+    assert [round(float(a[0]), 1) for a in audio[:2]] == [0.1, 0.2]  # in order
+    (switch,) = w.bus.of(VoiceSwitch)
+    assert (switch.from_engine, switch.to_engine, switch.switch_reason) == (
+        "cartesia",
+        "pocket_tts",
+        "unreachable",
+    )
+    assert w.router.take_spoken() == {"cartesia": 4, "pocket_tts": 4 + 6}
+    w.router.stop()
+
+
+async def test_a_big_moment_streamed_by_the_brain_reaches_cartesia_from_its_first_word(
+    mock: MockCartesia,  # noqa: F811
+) -> None:
+    w = World(mock.url)
+    pipeline, hub, speaker, _turn = await pipeline_with(w.engines, w.cfg)
+
+    # Deltas alone carry the emotion and the big-moment flag: the reply is spoken before
+    # its final event exists.
+    for text in ("Good morning, sir. ", "Ready when you are."):
+        await pipeline.on_hub_event(
+            ReplyDelta(
+                ts_ns=0,
+                source="brain",
+                turn_id="t1",
+                text=text,
+                emotion="excited",
+                big_moment=True,
+            )
+        )
+    await until(lambda: mock.transcripts())
+    assert mock.received[0]["generation_config"] == {"emotion": "excited"}
+
+    await pipeline.on_hub_event(
+        ReplyFinal(
+            ts_ns=0,
+            source="brain",
+            turn_id="t1",
+            text="Good morning, sir. Ready when you are.",
+            emotion="excited",
+            big_moment=True,
+            reply_source="llm",
+        )
+    )
+    await play_out(pipeline, hub, speaker)
+
+    spoken = of(hub, TtsSpoken)
+    assert [(s.engine, s.chars) for s in spoken] == [
+        ("cartesia", len("Good morning, sir.") + len("Ready when you are."))
+    ]
+    assert w.engines["pocket_tts"].texts == []
+    pipeline._tts.stop()  # type: ignore[union-attr]  # noqa: SLF001
 
 
 # --- kokoro itself -------------------------------------------------------------------

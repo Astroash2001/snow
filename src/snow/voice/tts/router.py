@@ -22,6 +22,7 @@ import numpy as np
 
 from snow.contracts.events import HealthSubsystem, VoiceStatus, VoiceSwitch
 from snow.voice.tts.base import EngineError, EngineName, ErrorKind, Samples, TtsEngine
+from snow.voice.tts.cartesia import CartesiaEngine
 from snow.voice.tts.config import TtsConfig
 
 log = logging.getLogger("snow.voice")
@@ -34,6 +35,9 @@ _ROLE: dict[EngineName, VoiceRole] = {
     "kokoro": "fallback",
 }
 _LOADING = "loading"
+_MAINTAIN_S = (
+    5.0  # how often Cartesia's probe, credits and warm connection are looked at
+)
 
 
 class AllVoicesDown(EngineError):
@@ -65,9 +69,13 @@ class VoiceRouter:
         self._switched: set[EngineName] = set()  # failures already announced
         self._active: TtsEngine | None = None
         self.spoke_with: EngineName | None = None  # the engine of the latest audio
-        self._announced: tuple[str, ...] | None = None
+        self._announced: tuple[object, ...] | None = None
         self.sample_rate = 24000  # of the playout; set from the first engine that loads
         self.ready = False
+        self.spoken: dict[
+            EngineName, int
+        ] = {}  # characters each engine spoke this reply
+        self._maintainer: asyncio.Future[None] | None = None
 
     # --- startup ------------------------------------------------------------------
 
@@ -82,6 +90,35 @@ class VoiceRouter:
         for name in self._order():
             self._state[name] = _LOADING
             self._loads[name] = asyncio.ensure_future(self._load(name))
+        if self._cartesia() is not None:
+            self._maintainer = asyncio.ensure_future(self._maintain())
+
+    def stop(self) -> None:
+        if self._maintainer is not None:
+            self._maintainer.cancel()
+
+    def _cartesia(self) -> CartesiaEngine | None:
+        engine = self._engines.get("cartesia")
+        if isinstance(engine, CartesiaEngine) and self._enabled("cartesia"):
+            return engine
+        return None
+
+    async def _maintain(self) -> None:
+        """Cartesia's free probe, credits and warm connection (SPCH-03 failback)."""
+        cartesia = self._cartesia()
+        assert cartesia is not None  # noqa: S101 - start() checked
+        while True:
+            await asyncio.sleep(_MAINTAIN_S)  # first look after start-up has settled
+            try:
+                await cartesia.maintain()
+            except Exception as e:  # noqa: BLE001 - upkeep must never stop the voice
+                log.error("cartesia_upkeep_failed kind=%s", type(e).__name__)
+            self.announce()
+
+    def on_snapshot(self, cartesia_chars_today: int) -> None:
+        """The hub's Cartesia characters today: where the budget starts."""
+        if (cartesia := self._cartesia()) is not None:
+            cartesia.set_base(cartesia_chars_today)
 
     async def _load(self, name: EngineName) -> None:
         try:
@@ -96,7 +133,7 @@ class VoiceRouter:
     async def wait_ready(self) -> bool:
         """Wait until the engine that would speak an everyday reply is known; False when
         none can. Slower engines behind it keep loading in the background."""
-        engine = await self._choose(big_moment=False)
+        engine = await self._choose(big_moment=False, text="")
         if engine is not None:
             self.sample_rate = engine.sample_rate
         self.ready = True
@@ -106,8 +143,8 @@ class VoiceRouter:
     # --- choosing -----------------------------------------------------------------
 
     def _eligible(self, name: EngineName, big_moment: bool) -> bool:
-        if name == "cartesia":
-            return big_moment  # D-33: only the big emotional moments
+        if name == "cartesia":  # D-33: only the big emotional moments, with a voice set
+            return big_moment and bool(self._cfg.engines.cartesia.voice_id)
         if name == "chatterbox":
             return self._gpu_ok()
         return True
@@ -119,23 +156,38 @@ class VoiceRouter:
         return name in self._until and self._clock() >= self._until[name]
 
     async def _choose(
-        self, *, big_moment: bool, tried: frozenset[EngineName] = frozenset()
+        self,
+        *,
+        big_moment: bool,
+        text: str,
+        tried: Mapping[EngineName, str] | None = None,
     ) -> TtsEngine | None:
         """First usable engine in the configured order; waits for one still loading.
-        `tried` are engines that already failed this chunk."""
+        `tried` are engines that already failed this reply, with why."""
+        tried = tried or {}
         failed: tuple[EngineName, str] | None = None
+        cartesia = self._cartesia()
         for name in self._order():
-            if name in tried or not self._eligible(name, big_moment):
+            if name in tried:
+                failed = failed or (name, tried[name])
+                continue
+            if not self._eligible(name, big_moment):
                 continue
             if self._state.get(name) == _LOADING:
                 await self._loads[name]
             if not self._usable(name):
                 failed = failed or (name, self._state.get(name, "load_failed"))
                 continue
+            if name == "cartesia" and cartesia is not None:
+                if why := cartesia.unavailable_reason(len(text)):  # health, key, budget
+                    failed = failed or (name, why)
+                    continue
             if name in self._until:  # back after its cooldown
                 del self._until[name]
                 self._state[name] = "ok"
                 self._switched.discard(name)
+            if name == "cartesia":
+                self._switched.discard(name)  # available again: the next outage is news
             if failed and failed[0] not in self._switched:
                 self._switched.add(failed[0])
                 self._publish(
@@ -149,6 +201,8 @@ class VoiceRouter:
 
     def _fail(self, engine: TtsEngine, kind: ErrorKind) -> None:
         log.error("tts_failed engine=%s kind=%s", engine.name, kind)
+        if engine.name == "cartesia":
+            return  # its own health decides when it is back (the free probe)
         self._state[engine.name] = kind
         if kind != "load_failed":
             self._until[engine.name] = self._clock() + self._cfg.router.cooldown_s
@@ -165,33 +219,58 @@ class VoiceRouter:
     ) -> None:
         """Speak each text chunk in order, handing audio to `push`. Raises
         `AllVoicesDown` (after publishing the health row) when no engine can say one."""
-        async for text in chunks:
-            await self._say(text, emotion, big_moment, push)
+        tried: dict[
+            EngineName, str
+        ] = {}  # an engine that broke stays out of this reply
+        self.spoken = {}
+        try:
+            async for text in chunks:
+                await self._say(text, emotion, big_moment, push, tried)
+        finally:
+            if (cartesia := self._cartesia()) is not None:
+                await (
+                    cartesia.end_reply()
+                )  # closes its context; a no-op if it was dropped
 
     async def _say(
-        self, text: str, emotion: str, big_moment: bool, push: Callable[[Samples], None]
+        self,
+        text: str,
+        emotion: str,
+        big_moment: bool,
+        push: Callable[[Samples], None],
+        tried: dict[EngineName, str],
     ) -> None:
-        tried: set[EngineName] = set()  # a zero cooldown must not retry a broken engine
         while True:
-            engine = await self._choose(big_moment=big_moment, tried=frozenset(tried))
+            engine = await self._choose(big_moment=big_moment, text=text, tried=tried)
             if engine is None:
                 self.announce()
                 raise AllVoicesDown
             self._active = engine
             self.spoke_with = engine.name
+            pushed = False
             try:
                 async for audio in engine.stream(text, emotion):
+                    pushed = True
                     push(self._resample(audio, engine.sample_rate))
                 self.announce()  # an engine back after its cooldown shows as current
                 return
             except EngineError as e:
                 self._fail(engine, e.kind)
-                tried.add(engine.name)
+                tried[engine.name] = e.kind
             except Exception:  # noqa: BLE001 - library errors count as a broken engine
                 self._fail(engine, "unreachable")
-                tried.add(engine.name)
+                tried[engine.name] = "unreachable"
             finally:
                 self._active = None
+                if pushed:  # credits and the daily count follow what was started
+                    self.spoken[engine.name] = self.spoken.get(engine.name, 0) + len(
+                        text
+                    )
+
+    def take_spoken(self) -> dict[EngineName, int]:
+        """Characters each engine spoke in the reply that just ended, once."""
+        spoken, self.spoken = self.spoken, {}
+        return spoken
 
     def cancel(self) -> None:
         """Thread-safe: stop the engine that is speaking, if any."""
@@ -229,9 +308,22 @@ class VoiceRouter:
         """Publish the health row and the voice card when they changed (or when forced:
         a row sent while the hub was away is lost)."""
         status, detail = self.health()
-        current = self._current()
-        cartesia = self._usable("cartesia") and self._enabled("cartesia")
-        key = (status, detail or "", current.name if current else "", str(cartesia))
+        shown = self._current()
+        cartesia = self._cartesia()
+        if cartesia is not None and self.spoke_with == "cartesia":
+            shown = (
+                cartesia  # the big moment just spoken stays on the card until the next
+            )
+        available, reason = cartesia.status() if cartesia else (False, None)
+        credits = cartesia.credits_remaining if cartesia else None
+        key = (
+            status,
+            detail or "",
+            shown.name if shown else "",
+            available,
+            reason,
+            credits,
+        )
         if not force and key == self._announced:
             return
         self._announced = key
@@ -243,13 +335,13 @@ class VoiceRouter:
             status=status,
             detail=detail,
         )
-        if current is not None:
+        if shown is not None:
             self._publish(
                 VoiceStatus,
-                engine=current.name,
-                voice_name=current.voice_name,
-                voice_role=_ROLE[current.name],
-                credits_remaining=None,
-                cartesia_available=cartesia,
-                cartesia_reason="ok" if cartesia else None,
+                engine=shown.name,
+                voice_name=shown.voice_name,
+                voice_role=_ROLE[shown.name],
+                credits_remaining=credits,
+                cartesia_available=available,
+                cartesia_reason=reason,
             )
