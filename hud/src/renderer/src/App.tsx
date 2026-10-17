@@ -1,6 +1,7 @@
 import { MicOff, Moon, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Banner } from "./components/Banner";
+import { HealthPanel } from "./components/HealthPanel";
 import { MuteButton, toggleMute } from "./components/MuteButton";
 import { Presence, STATE_WORDS } from "./components/Presence";
 import { TranscriptView } from "./components/TranscriptView";
@@ -103,7 +104,10 @@ export function App() {
           )}
           <MuteButton />
         </section>
-        <TranscriptView />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+          <TranscriptView />
+          <HealthPanel />
+        </div>
       </main>
     </div>
   );
