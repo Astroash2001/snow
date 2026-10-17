@@ -23,6 +23,9 @@ Presence = Literal["sleeping", "listening", "thinking", "speaking", "muted"]
 CHUNK = 512  # Silero's chunk at 16 kHz
 _PRE_SPEECH_S = 0.5  # follow-on turns keep this much audio before speech is confirmed
 _LEVEL_FLOOR_DB = -60.0
+_BARGE_LEAD_S = (
+    0.3  # audio kept from before the speech that barged in, so no onset is lost
+)
 
 
 def mic_level(chunk: Pcm) -> float:
@@ -73,6 +76,8 @@ class EngineEvents(Protocol):
 
     def on_level(self, level: float) -> None: ...
 
+    def on_barge_in(self) -> None: ...
+
 
 class NullEvents:
     def on_wake(self, hit: WakeHit) -> None: ...
@@ -92,6 +97,8 @@ class NullEvents:
     def on_presence(self, state: Presence) -> None: ...
 
     def on_level(self, level: float) -> None: ...
+
+    def on_barge_in(self) -> None: ...
 
 
 @dataclass
@@ -131,6 +138,11 @@ class TurnEngine:
         self._waited = 0
         self._idle = 0  # listening samples without speech (audio time)
         self._replaying = False
+        # Barge-in (VOIC-06): Snow is audibly speaking; the user's voice may cut it off.
+        self._speaking_out = False
+        self._barge_run = 0  # consecutive speech samples heard over the reply
+        ring = math.ceil((cfg.barge_in_min_ms / 1000 + _BARGE_LEAD_S) * sample_rate)
+        self._ring: deque[Pcm] = deque(maxlen=math.ceil(ring / CHUNK))
         # Loop thread -> audio thread requests; deque appends are thread-safe.
         self._inbox: deque[tuple[str, str]] = deque()
 
@@ -141,6 +153,11 @@ class TurnEngine:
     def end_conversation(self, reason: str) -> None:
         """Thread-safe: end the open conversation (phrase or sleep command)."""
         self._inbox.append(("end", reason))
+
+    def set_speaking(self, speaking: bool) -> None:
+        """Thread-safe: Snow's voice is audible (True) or has stopped (False). While it
+        is, the user speaking for `barge_in_min_ms` interrupts it (VOIC-06)."""
+        self._inbox.append(("speaking", "1" if speaking else ""))
 
     def mute(self) -> None:
         """Thread-safe: drop any open turn or conversation silently (D-10, VOIC-03)."""
@@ -155,9 +172,14 @@ class TurnEngine:
             kind, arg = self._inbox.popleft()
             if kind == "reply":
                 self._reply_done()
+            elif kind == "speaking":
+                self._speaking_out = bool(arg)
+                self._barge_run = 0
+                self._ring.clear()
             elif kind == "mute":
                 self._close_turn()
                 self._waiting = False
+                self._speaking_out = False
                 self._rem = np.zeros(0, dtype=np.int16)
                 self.state = State.MUTED
             elif kind == "unmute":
@@ -168,6 +190,7 @@ class TurnEngine:
 
     def _reply_done(self) -> None:
         self._idle = 0
+        self._speaking_out = False
         if self._waiting and self.state is State.AWAKE:
             self._waiting = False
             self.events.on_presence("listening")
@@ -177,6 +200,7 @@ class TurnEngine:
             return
         self._close_turn()
         self._waiting = False
+        self._speaking_out = False
         self.state = State.SLEEPING
         self.events.on_conversation_end(reason)
         self.events.on_presence("sleeping")
@@ -221,6 +245,9 @@ class TurnEngine:
 
     def _next(self, chunk: Pcm) -> None:
         if self._waiting:
+            if self._speaking_out:  # deaf to commands, but not to being talked over
+                self._listen_over(chunk)  # the reply is being spoken: no timeout either
+                return
             self._waited += CHUNK
             if self._waited >= self._samples(self._conv.reply_timeout_s):
                 self._reply_done()  # no reply is coming (providers down, STT failed)
@@ -236,6 +263,35 @@ class TurnEngine:
                 return
         self._chunk(chunk)
 
+    def _listen_over(self, chunk: Pcm) -> None:
+        """A reply is audible and no turn is open: enough speech cuts it off."""
+        self._ring.append(chunk)
+        if self._vad.speech_prob(chunk) < self._cfg.vad_threshold:
+            self._barge_run = 0
+            return
+        self._barge_run += CHUNK
+        if self._barge_run >= self._samples(self._cfg.barge_in_min_ms / 1000):
+            self._barge_in()
+
+    def _barge_in(self) -> None:
+        """Stop waiting and open the next turn on the audio that barged in."""
+        seed = list(self._ring)
+        self._ring.clear()
+        self._speaking_out = False
+        self._barge_run = 0
+        self._waiting = False
+        self._idle = 0
+        self._eot.clear()
+        t = _Turn(id=uuid.uuid4().hex[:12], boundary=0, follow_on=True)
+        t.chunks, t.samples, t.speaking = seed, len(seed) * CHUNK, True
+        t.last_speech_end = t.samples
+        self._turn = t
+        for kept in seed:
+            self._eot.append(kept)
+        self.events.on_barge_in()  # before the turn starts: the old reply is cut first
+        self.events.on_presence("listening")
+        self.events.on_turn_start(t.id)
+
     def _chunk(self, chunk: Pcm) -> None:
         t = self._turn
         assert t is not None  # noqa: S101 - callers check; narrows the type
@@ -250,6 +306,11 @@ class TurnEngine:
             t.silence = 0
             t.speech_run += CHUNK
             t.last_speech_end = t.samples
+            if self._speaking_out and t.speech_run >= self._samples(
+                cfg.barge_in_min_ms / 1000
+            ):  # a short voice (a wake acknowledgement) is cut off by the next words
+                self._speaking_out = False
+                self.events.on_barge_in()
             if not t.speaking and t.speech_run >= self._samples(cfg.start_secs):
                 t.speaking = True
                 self._idle = 0

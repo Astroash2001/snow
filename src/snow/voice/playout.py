@@ -88,6 +88,12 @@ class Playout:
         self._started = False  # first audible sample delivered
         self._chunks.clear()
         self._buffered = 0
+        self._played = 0
+
+    @property
+    def played(self) -> int:
+        """Samples handed to the device in this utterance; `abort` resets it."""
+        return self._played
 
     # --- event loop side ----------------------------------------------------------
 
@@ -152,6 +158,7 @@ class Playout:
                     else:
                         self._chunks[0] = head[take:]
                 self._buffered -= filled
+                self._played += filled
                 if filled and not self._started:
                     self._started = first = True
                 if filled < frames and self._ended:
