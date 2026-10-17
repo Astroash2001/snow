@@ -14,7 +14,7 @@ preroll_frames = 4   # 4 x 80 ms of RAM-only audio before the hit joins the turn
 refractory_s = 1.5
 # Leading wake phrase and common ASR mishearings, stripped from the transcript.
 strip_patterns = [
-    '^\W*(?:hey|hay|hi|hello|ok|okay|a|hate|hey,? a)[\s,.!?-]*(?:jarvis|jervis|jarvus|jarves|jarvas|service)\b[\s,.!?:;-]*',
+    '^\W*(?:hey|hay|hi|hello|ok|okay|a|hate|hey,? a)[\s,.!?-]*(?:jarvis|jervis|jarvus|jarves|jarvas|javas|service)\b[\s,.!?:;-]*',
     '^\W*(?:jarvis|jervis)\b[\s,.!?:;-]*',
 ]
 

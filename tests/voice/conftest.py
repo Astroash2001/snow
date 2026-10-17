@@ -10,6 +10,7 @@ import asyncio
 import io
 import wave
 from collections.abc import Awaitable, Callable, Iterator
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -20,10 +21,16 @@ import pytest
 
 from snow.config.secrets import Secret
 from snow.config.settings import load_config
-from snow.contracts.events import Event, HealthSubsystem, ReplyFinal, TranscriptFinal
+from snow.contracts.events import (
+    Event,
+    HealthSubsystem,
+    ReplyFinal,
+    SttStatus,
+    TranscriptFinal,
+)
 from snow.voice.config import VoiceConfig
 from snow.voice.pipeline import LocalSource, VoicePipeline
-from snow.voice.sources import FileSource, OnFrame
+from snow.voice.sources import FileSource, Frame, OnFrame
 from snow.voice.stt_groq import GroqStt
 from snow.voice.turn import TurnEngine
 from snow.voice.vad import EndOfTurn, VadDetector
@@ -39,11 +46,15 @@ class FakeHub:
     def __init__(self) -> None:
         self.events: list[Event] = []  # without health rows, so flow tests stay exact
         self.health: list[HealthSubsystem] = []
+        self.stt: list[SttStatus] = []  # source changes, also kept out of `events`
         self.pipeline: VoicePipeline | None = None  # set to answer every transcript
 
     async def publish(self, event: Event) -> None:
         if isinstance(event, HealthSubsystem):
             self.health.append(event)
+            return
+        if isinstance(event, SttStatus):
+            self.stt.append(event)
             return
         self.events.append(event)
         if self.pipeline is not None and isinstance(event, TranscriptFinal):
@@ -71,6 +82,8 @@ class FakeGroq:
 
     text: str = ""
     texts: list[str] = field(default_factory=list[str])  # per request, then `text`
+    fail_with: int | None = None  # answer every request with this HTTP status
+    retry_after: str | None = None
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
     violations: list[str] = field(default_factory=list[str])
 
@@ -81,6 +94,11 @@ class FakeGroq:
             and request.url.path == GROQ_PATH
         ):
             self.requests.append(request)
+            if self.fail_with is not None:
+                headers = {"retry-after": self.retry_after} if self.retry_after else {}
+                return httpx2.Response(
+                    self.fail_with, json={"error": {"message": "no"}}, headers=headers
+                )
             text = self.texts.pop(0) if self.texts else self.text
             return httpx2.Response(200, json={"text": text})
         self.violations.append(f"{request.method} {request.url}")
@@ -185,6 +203,48 @@ class StubSource:
     def close(self) -> None:
         self.calls.append("close")
         self.is_open = False
+
+
+SAID = "Jarvis what is the capital of France"
+
+
+class FakeLocalStt:
+    """Hears one word per 0.4 s of audio; records when it was asked for partials."""
+
+    def __init__(self) -> None:
+        self.words = SAID.split()
+        self.fed = 0
+        self.turns = 0
+        self.cancelled = 0
+        self.finished = False
+        self.fed_after_finish = 0
+        self.asked_at: list[int] = []  # samples fed so far at each partial() call
+        self._seen = ""
+
+    def start_turn(self) -> None:
+        self.turns += 1
+        self.fed, self.finished, self._seen = 0, False, ""
+
+    def feed(self, frame: Frame) -> None:
+        self.fed_after_finish += self.finished
+        self.fed += len(frame)
+
+    def partial(self) -> str | None:
+        self.asked_at.append(self.fed)
+        text = " ".join(self.words[: self.fed // 6400])
+        if text == self._seen:
+            return None
+        self._seen = text
+        return text
+
+    def finish(self) -> "Future[str]":
+        self.finished = True
+        done: Future[str] = Future()
+        done.set_result(SAID)
+        return done
+
+    def cancel(self) -> None:
+        self.cancelled += 1
 
 
 async def until(cond: Callable[[], bool], limit: float = 5.0) -> None:

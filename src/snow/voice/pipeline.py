@@ -33,6 +33,7 @@ from snow.voice.config import VoiceConfig
 from snow.voice.phrases import match_command, strip_wake
 from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
+from snow.voice.stt_router import SttRouter
 from snow.voice.turn import Presence, TurnEngine
 from snow.voice.vad import EndOfTurn, VadDetector
 from snow.voice.wake import WakeGate, WakeHit
@@ -79,7 +80,13 @@ class VoicePipeline:
         self._source = source
         self._wake = wake
         self._engine = engine
-        self._stt = stt
+        self._router = SttRouter(
+            stt,
+            cfg.stt,
+            self._emit,
+            has_local=local is not None,
+            on_change=self._publish_health,
+        )
         engine.events = self
         self._loop: asyncio.AbstractEventLoop | None = None
         self._q: asyncio.Queue[Event] = asyncio.Queue()
@@ -115,6 +122,7 @@ class VoicePipeline:
         self._loop = asyncio.get_running_loop()
         self._publisher_task = asyncio.ensure_future(self._publisher())
         self._publish_health()
+        self._router.announce()
         self._muted = not listen
         if listen:
             self._open_source()
@@ -125,14 +133,15 @@ class VoicePipeline:
     def _publish_health(self) -> None:
         """Both rows. Sent at start and on every hub (re)connect: a row sent while the
         hub was away is lost, and the key may have been added meanwhile."""
-        has_key = self._stt.has_key
+        self._router.refresh()  # a key stored since the last look counts at once
+        status, detail = self._router.health()
         self._emit(
             HealthSubsystem,
             name="speech_to_text",
             label="Speech to text",
             owner="voice",
-            status="running" if has_key else "down",
-            detail=None if has_key else "No Groq key. Run snow setup.",
+            status=status,
+            detail=detail,
         )
         self._emit(
             HealthSubsystem,
@@ -165,6 +174,8 @@ class VoicePipeline:
         elif self._muted:  # we muted but the hub never heard: tell it, stay closed
             self._emit(MuteChanged, muted=True, by="voice")
         self._publish_health()
+        if snap.stt is None:  # a hub that restarted forgot the source: say it again
+            self._router.announce(force=True)
 
     async def on_command(self, command: Command) -> None:
         if isinstance(command, MuteSet):
@@ -373,9 +384,10 @@ class VoicePipeline:
         local: "Future[str] | None" = None,
     ) -> None:
         try:
-            raw = await self._stt.transcribe(pcm, self._cfg.audio.sample_rate)
-        except SttUnavailable as e:
-            # Local fallback and its health reporting arrive with plan 01-22.
+            raw, source = await self._router.final(
+                pcm, self._cfg.audio.sample_rate, local
+            )
+        except SttUnavailable as e:  # no source could hear this turn
             log.warning("stt_unavailable kind=%s", e.kind)
             self._release(turn_id)
             return
@@ -403,7 +415,7 @@ class VoicePipeline:
                 correlation_id=correlation,
                 turn_id=turn_id,
                 text=text,
-                stt_source="groq",
+                stt_source=source,
                 duration_ms=duration_ms,
             )
         )

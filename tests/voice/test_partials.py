@@ -1,7 +1,6 @@
 """Live words while the user speaks (VOIC-08, D-38): cadence, wake strip, turn end."""
 
 import re
-from concurrent.futures import Future
 from functools import partial
 
 import pytest
@@ -9,50 +8,9 @@ import pytest
 from snow.config.settings import load_config
 from snow.contracts.events import TranscriptFinal, TranscriptPartial
 from snow.voice.config import VoiceConfig
-from snow.voice.sources import FileSource, Frame
+from snow.voice.sources import FileSource
 from snow.voice.stt_local import LocalStt
-from tests.voice.conftest import SR, RunFixture
-
-SAID = "Jarvis what is the capital of France"
-
-
-class FakeLocalStt:
-    """Hears one word per 0.4 s of audio; records when it was asked for partials."""
-
-    def __init__(self) -> None:
-        self.words = SAID.split()
-        self.fed = 0
-        self.turns = 0
-        self.cancelled = 0
-        self.finished = False
-        self.fed_after_finish = 0
-        self.asked_at: list[int] = []  # samples fed so far at each partial() call
-        self._seen = ""
-
-    def start_turn(self) -> None:
-        self.turns += 1
-        self.fed, self.finished, self._seen = 0, False, ""
-
-    def feed(self, frame: Frame) -> None:
-        self.fed_after_finish += self.finished
-        self.fed += len(frame)
-
-    def partial(self) -> str | None:
-        self.asked_at.append(self.fed)
-        text = " ".join(self.words[: self.fed // 6400])
-        if text == self._seen:
-            return None
-        self._seen = text
-        return text
-
-    def finish(self) -> "Future[str]":
-        self.finished = True
-        done: Future[str] = Future()
-        done.set_result(SAID)
-        return done
-
-    def cancel(self) -> None:
-        self.cancelled += 1
+from tests.voice.conftest import SR, FakeLocalStt, RunFixture
 
 
 async def test_partials_grow_with_the_turn_and_stop_at_its_end(

@@ -10,6 +10,7 @@ from snow.voice.config import VoiceConfig
 from snow.voice.pipeline import build_pipeline
 from snow.voice.sources import MicSource
 from snow.voice.stt_groq import GroqStt
+from snow.voice.stt_local import LocalStt
 
 
 async def _main() -> None:
@@ -20,7 +21,10 @@ async def _main() -> None:
     )  # heartbeats start as soon as it connects
     a = cfg.audio
     mic = MicSource(a.input_device, a.sample_rate, a.frame_samples)
-    pipeline = build_pipeline(cfg, client, mic, GroqStt(cfg.stt.groq, get_secret))
+    local = LocalStt(cfg.stt.local, a.sample_rate)  # loads in its own thread
+    pipeline = build_pipeline(
+        cfg, client, mic, GroqStt(cfg.stt.groq, get_secret), local=local
+    )
     mic.on_health = pipeline.mic_health
     client.on_event = pipeline.on_hub_event
     client.on_command = pipeline.on_command
@@ -31,6 +35,7 @@ async def _main() -> None:
         await hub_task
     finally:
         await pipeline.stop()
+        local.close()
 
 
 if __name__ == "__main__":
