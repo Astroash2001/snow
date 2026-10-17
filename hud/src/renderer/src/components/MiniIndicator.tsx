@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { TranscriptRow } from "../../../generated/contracts";
 import { copy } from "../copy";
 import { selectAlert, useHud } from "../store";
@@ -107,6 +114,72 @@ function CaptionPill({ caption }: { caption: Caption }) {
   );
 }
 
+export const DRAG_THRESHOLD_PX = 4; // less movement than this between press and release is a click
+
+// Which half of its display the window is on, told by the shell. On the left half the row mirrors
+// to `[orb][caption]` so the caption still grows toward the screen interior.
+// The shell tells it once the page has loaded, which can be before React has mounted anything, so
+// the listener is set up when this module loads and the value is read from here.
+type Side = "left" | "right";
+let currentSide: Side = "right";
+const sideListeners = new Set<() => void>();
+window.snow.chrome.onCommand((command) => {
+  if (command !== "side:left" && command !== "side:right") return;
+  currentSide = command === "side:left" ? "left" : "right";
+  for (const listener of sideListeners) listener();
+});
+const useSide = (): Side =>
+  useSyncExternalStore(
+    (listener) => {
+      sideListeners.add(listener);
+      return () => sideListeners.delete(listener);
+    },
+    () => currentSide,
+  );
+
+// Click versus drag without a CSS drag region (those swallow clicks): the press is tracked on the
+// pointer's screen position, which does not change when the window moves under it. Under 4 px at
+// release it is a click and opens the dashboard; 4 px or more is a drag, reported as the total
+// movement so far, and never opens the dashboard.
+function useOrbPointer() {
+  const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
+  const { chrome } = window.snow;
+  const end = (e: ReactPointerEvent, cancelled: boolean) => {
+    const p = press.current;
+    if (!p) return;
+    press.current = null;
+    if (p.dragging) chrome.dragEnd();
+    else if (!cancelled) chrome.click();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Not captured (a synthetic pointer): nothing to release.
+    }
+  };
+  return {
+    onPointerDown: (e: ReactPointerEvent) => {
+      if (e.button !== 0) return;
+      press.current = { x: e.screenX, y: e.screenY, dragging: false };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // Not capturable (a synthetic pointer): the events still arrive while over the orb.
+      }
+    },
+    onPointerMove: (e: ReactPointerEvent) => {
+      const p = press.current;
+      if (!p) return;
+      const dx = e.screenX - p.x;
+      const dy = e.screenY - p.y;
+      if (!p.dragging && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      p.dragging = true;
+      chrome.drag(dx, dy);
+    },
+    onPointerUp: (e: ReactPointerEvent) => end(e, false),
+    onPointerCancel: (e: ReactPointerEvent) => end(e, true),
+  };
+}
+
 // The corner form of Snow (D-13): `[caption pill][orb]`, the orb at the screen-side edge. The window
 // is click-through except the orb, so pointer enter and leave on the orb switch that off and on.
 export function MiniIndicator() {
@@ -115,6 +188,8 @@ export function MiniIndicator() {
   const connection = useHud((s) => s.connection);
   const alert = useHud(selectAlert);
   const caption = useCaption();
+  const side = useSide();
+  const pointer = useOrbPointer();
   const online = connection === "online";
   // Before the first snapshot and while the socket is down the orb shows its offline style.
   const orbState = online ? presence : "offline";
@@ -123,7 +198,13 @@ export function MiniIndicator() {
   const { chrome } = window.snow;
 
   return (
-    <div className="flex h-screen items-center justify-end gap-2 pr-2">
+    <div
+      data-testid="mini-row"
+      data-side={side}
+      className={`flex h-screen items-center justify-end gap-2 ${
+        side === "left" ? "flex-row-reverse pl-2" : "pr-2"
+      }`}
+    >
       {showMuted && (
         <div
           data-testid="mini-muted"
@@ -137,14 +218,9 @@ export function MiniIndicator() {
         data-testid="mini-orb"
         onPointerEnter={() => chrome.hover(true)}
         onPointerLeave={() => chrome.hover(false)}
+        {...pointer}
       >
-        <Presence
-          state={orbState}
-          size={MINI_ORB_PX}
-          alert={alert}
-          fpsCap={MINI_FPS}
-          onClick={() => chrome.click()}
-        />
+        <Presence state={orbState} size={MINI_ORB_PX} alert={alert} fpsCap={MINI_FPS} />
       </div>
     </div>
   );

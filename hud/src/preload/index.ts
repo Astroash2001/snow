@@ -24,7 +24,7 @@ const chrome = {
   },
   /** Mini window: the orb was clicked. */
   click: () => ipcRenderer.send("mini:click"),
-  /** Mini window drag by screen deltas (wired by plan 01-27). */
+  /** Mini window drag: the pointer's total screen movement since the press. */
   drag: (dx: number, dy: number) => {
     if (finite(dx) && finite(dy)) ipcRenderer.send("mini:drag", dx, dy);
   },
@@ -32,21 +32,28 @@ const chrome = {
   /** Dashboard shown (true) or hidden (false); it renders nothing while hidden. */
   onVisibility: (cb: (visible: boolean) => void) =>
     listen("chrome:visibility", (v): v is boolean => typeof v === "boolean", cb),
-  /** A tray or menu action for the dashboard renderer to carry out (wired by plan 01-27). */
+  /** A tray or menu action for the dashboard renderer ("mute", "unmute", "quit"), or "side:left" / "side:right" for the mini. */
   onCommand: (cb: (command: string) => void) =>
     listen("chrome:command", (v): v is string => typeof v === "string" && v.length < 32, cb),
-  /** What the tray needs to show: the state word and whether mute or a fault is on. */
-  sendState: (state: { stateWord: string; muted: boolean; attention: boolean }) => {
+  /** What the tray needs to show: the state word, whether mute or a fault is on, and whether the core is reachable. */
+  sendState: (state: {
+    stateWord: string;
+    muted: boolean;
+    attention: boolean;
+    online: boolean;
+  }) => {
     if (
       typeof state?.stateWord === "string" &&
       state.stateWord.length < 64 &&
       typeof state.muted === "boolean" &&
-      typeof state.attention === "boolean"
+      typeof state.attention === "boolean" &&
+      typeof state.online === "boolean"
     ) {
       ipcRenderer.send("chrome:state", {
         stateWord: state.stateWord,
         muted: state.muted,
         attention: state.attention,
+        online: state.online,
       });
     }
   },
