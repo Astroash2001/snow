@@ -31,6 +31,7 @@ from snow.contracts.events import (
     TranscriptPartial,
     TtsSpoken,
     TurnCancelled,
+    TurnTiming,
     WakeDetected,
 )
 from snow.contracts.wire import Command, MuteSet, Snapshot
@@ -88,6 +89,12 @@ class _Reply:
     chars: int = 0
     first_audio_ms: int | None = None
     spoke: bool = False  # the first sample has reached the speaker
+    # Wall-clock marks of this reply's turn (SPCH-04); None where a stage did not occur.
+    vad_stop_ns: int | None = None
+    stt_final_ns: int | None = None
+    llm_first_token_ns: int | None = None
+    tts_first_audio_ns: int | None = None
+    audio_out_first_ns: int | None = None
     pushed: int = 0  # samples handed to the playout so far
     # (text, samples pushed before it) per chunk, to tell what was heard if cut off
     chunks: list[tuple[str, int]] = field(default_factory=list[tuple[str, int]])
@@ -162,6 +169,8 @@ class VoicePipeline:
         self._reply: _Reply | None = None
         # Turns whose reply the user cut off: their late deltas must not start it again.
         self._dropped: deque[str] = deque(maxlen=8)
+        # turn id -> [VAD stop, STT final] wall-clock ns, until its reply takes them
+        self._marks: dict[str, list[int | None]] = {}
 
     @property
     def waiting_reply(self) -> bool:
@@ -430,6 +439,9 @@ class VoicePipeline:
         correlation = self._conversation
         self._speaking = None
         self._pending = turn_id
+        self._marks[turn_id] = [time.time_ns(), None]
+        if len(self._marks) > 16:  # turns answered without a reply leave theirs behind
+            del self._marks[next(iter(self._marks))]
         local = self._local.finish() if self._local and self._local_turn else None
         self._local_turn = False  # partials stop with the turn
         self._loop.call_soon_threadsafe(
@@ -483,6 +495,9 @@ class VoicePipeline:
         reply = self._reply = _Reply(
             turn_id, time.monotonic(), waited=self._pending is not None
         )
+        reply.llm_first_token_ns = time.time_ns()
+        vad_stop, stt_final = self._marks.pop(turn_id or "", [None, None])
+        reply.vad_stop_ns, reply.stt_final_ns = vad_stop, stt_final
         task = reply.task = asyncio.ensure_future(self._run_reply(reply))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -531,6 +546,7 @@ class VoicePipeline:
                     yield text
 
             def push(audio: Samples) -> None:
+                reply.tts_first_audio_ns = reply.tts_first_audio_ns or time.time_ns()
                 reply.pushed += len(audio)
                 playout.push(audio)
 
@@ -544,11 +560,11 @@ class VoicePipeline:
             self._finish(reply)
 
     def _first_audio(self, ts_ns: int) -> None:
-        del ts_ns
         reply = self._reply
         if reply is None or reply.spoke:
             return
         reply.spoke = True
+        reply.audio_out_first_ns = ts_ns
         self._engine.set_speaking(True)  # from here the user can talk over it
         reply.first_audio_ms = int((time.monotonic() - reply.started) * 1000)
         self._emit(PresenceState, state="speaking", mode=self._mode)
@@ -567,6 +583,7 @@ class VoicePipeline:
         if self._reply is not reply:
             return
         self._reply = None
+        self._publish_timing(reply)
         if reply.spoke:
             self._emit(
                 TtsSpoken,
@@ -585,10 +602,25 @@ class VoicePipeline:
             return
         turn_id, heard = reply.turn_id, reply.heard(played)
         self._stop_speech()
+        self._publish_timing(reply)
         if turn_id is not None:  # a wake acknowledgement has no turn to cancel
             self._dropped.append(turn_id)
             self._emit(TurnCancelled, turn_id=turn_id, cancel_reason="barge_in")
         self._emit(ReplyInterrupted, turn_id=turn_id, spoken_text=heard)
+
+    def _publish_timing(self, reply: _Reply) -> None:
+        """One `turn.timing` per answered turn (an acknowledgement has no VAD stop)."""
+        if reply.vad_stop_ns is None:
+            return
+        self._emit(
+            TurnTiming,
+            turn_id=reply.turn_id,
+            vad_stop_ns=reply.vad_stop_ns,
+            stt_final_ns=reply.stt_final_ns,
+            llm_first_token_ns=reply.llm_first_token_ns,
+            tts_first_audio_ns=reply.tts_first_audio_ns,
+            audio_out_first_ns=reply.audio_out_first_ns,
+        )
 
     def _stop_speech(self) -> None:
         """Drop the reply being spoken, without a word more (mute, a newer reply)."""
@@ -630,6 +662,8 @@ class VoicePipeline:
             log.error("stt_failed kind=%s", type(e).__name__)
             self._release(turn_id)
             return
+        if marks := self._marks.get(turn_id):
+            marks[1] = time.time_ns()
         if self._muted:  # muted while the audio was up there: the turn is void
             return
         text = strip_wake(raw, self._cfg.wake.strip_patterns)
