@@ -24,7 +24,9 @@ function createDashboard(): void {
   win.webContents.on("will-navigate", (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.once("ready-to-show", () => win.show());
-  win.loadFile(join(__dirname, "../renderer/index.html"));
+  // SNOW_HUD_TEST=1 (set only by the e2e suite) makes the renderer expose its test hook.
+  const query = process.env.SNOW_HUD_TEST === "1" ? { snowtest: "1" } : undefined;
+  win.loadFile(join(__dirname, "../renderer/index.html"), { query });
 }
 
 app.whenReady().then(() => {
