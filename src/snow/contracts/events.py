@@ -137,6 +137,10 @@ class ReplyDelta(Envelope):
 
     type: Literal["reply.delta"] = "reply.delta"
     text: str
+    # The brain reads both from the reply header before the first word, so streamed text
+    # reaches the right voice at once (a big moment goes to Cartesia, SPCH-02).
+    emotion: str | None = None
+    big_moment: bool = False
 
 
 class ReplyFinal(Envelope):

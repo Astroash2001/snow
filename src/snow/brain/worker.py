@@ -273,6 +273,8 @@ class BrainWorker:
                     turn_id=tid,
                     causation_id=cause,
                     text=piece,
+                    emotion=apply_overrides(persona, parser.emotion, heard.tone, facts),
+                    big_moment=parser.big,
                 )
             )
 

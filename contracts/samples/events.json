@@ -322,8 +322,10 @@
   },
   "reply.delta": {
     "event": {
+      "big_moment": false,
       "causation_id": null,
       "correlation_id": null,
+      "emotion": null,
       "reason": null,
       "result": null,
       "risk_tier": "free",

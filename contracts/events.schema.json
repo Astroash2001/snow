@@ -2463,6 +2463,11 @@
     "ReplyDelta": {
       "additionalProperties": false,
       "properties": {
+        "big_moment": {
+          "default": false,
+          "title": "Big Moment",
+          "type": "boolean"
+        },
         "causation_id": {
           "anyOf": [
             {
@@ -2486,6 +2491,18 @@
           ],
           "default": null,
           "title": "Correlation Id"
+        },
+        "emotion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emotion"
         },
         "reason": {
           "anyOf": [

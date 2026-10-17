@@ -158,6 +158,10 @@ async def test_reply_header_never_reaches_deltas_and_sets_emotion_and_big(
     deltas = [e.text for e in published if isinstance(e, ReplyDelta)]
     [final] = [e for e in published if isinstance(e, ReplyFinal)]
     assert "".join(deltas) == "Welcome back, sir." and "[" not in "".join(deltas)
+    # every delta already carries the header's emotion and big-moment flag, so the
+    # voice router picks Cartesia before the final event exists (SPCH-02)
+    flags = {(e.emotion, e.big_moment) for e in published if isinstance(e, ReplyDelta)}
+    assert flags == {("excited", True)}
     assert (final.text, final.emotion, final.big_moment, final.reply_source) == (
         "Welcome back, sir.",
         "excited",
