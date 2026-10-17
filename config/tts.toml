@@ -1,5 +1,20 @@
 # Speech output (SPCH-03, SPCH-04). Typed by snow.voice.tts.config.TtsConfig.
 
+# Spoken only by `snow dev audition-voices`, never on Snow's reply path (SPCH-01).
+audition_line = "Good evening. This is how I sound, so tell me whether it suits you."
+
+[audition]
+# Cartesia voices spoken per run; each one costs credits (about 1 per character).
+max_candidates = 8
+# Stock voices from the research shortlist; heard first when Cartesia has them.
+cartesia_shortlist = ["Daniel", "Archie", "Parker", "Jameson", "Corey", "Brandon", "Cory", "Alec", "Benedict", "Casper", "Caspian"]
+# Built-in Pocket TTS presets heard in the audition. Licences (Kyutai tts-voices README):
+# marius and javert are voice donations (CC0); george, charles, paul and michael are VCTK
+# (CC BY 4.0, credit the dataset before distribution); peter_yearsley, stuart_bell and
+# bill_boerst come from LibriVox through Voice-Zero (CC0). The non-commercial sets
+# (expresso, ears) are left out on purpose.
+pocket_voices = ["marius", "javert", "george", "charles", "paul", "michael", "peter_yearsley", "stuart_bell", "bill_boerst"]
+
 [router]
 # D-33: Cartesia for big moments, Chatterbox only on mains power with the GPU idle,
 # Pocket TTS everyday, Kokoro last. The router walks this list per reply and skips an
@@ -19,10 +34,34 @@ assume_headphones = true
 
 [engines.pocket_tts]
 enabled = true
-# Kyutai preset, a CC0 voice donation (kyutai/tts-voices, voice-donations/Selfie.wav).
-# The user's own voice replaces it in plan 01-32.
-voice = "marius"
+# The base voice. `path` is a built-in preset name, a .safetensors voice state or an audio
+# file; `consent` is mandatory (self, consenting_person or licensed_preset) and a clip
+# without it is refused at start (D-05, T-01-50). marius is a Kyutai voice donation, CC0
+# (kyutai/tts-voices, voice-donations/Selfie.wav). `snow dev audition-voices` rewrites this.
+reference = { path = "marius", consent = "licensed_preset" }
 torch_threads = 4
+
+# D-34: the reply emotion picks a mood clip of the SAME voice. Until a licensed set of
+# one speaker in several moods is available, every mood uses the base preset, so the
+# mood does not change the sound yet. Kyutai's expressive sets (expresso, ears) are
+# non-commercial, and an audio clip needs the gated Pocket TTS weights with voice
+# cloning (the user accepts those terms at huggingface.co/kyutai/pocket-tts).
+[engines.pocket_tts.moods]
+calm = { path = "marius", consent = "licensed_preset" }
+upbeat = { path = "marius", consent = "licensed_preset" }
+serious = { path = "marius", consent = "licensed_preset" }
+playful = { path = "marius", consent = "licensed_preset" }
+sympathetic = { path = "marius", consent = "licensed_preset" }
+
+# The emotions the brain may choose (persona.toml allowed_emotions) -> a mood above.
+# An emotion not listed here speaks in the calm mood.
+[engines.pocket_tts.emotion_to_mood]
+neutral = "calm"
+content = "upbeat"
+calm = "calm"
+curious = "playful"
+sympathetic = "sympathetic"
+excited = "upbeat"
 
 [engines.kokoro]
 # Last-resort local voice (SPCH-03): British male. Not streaming, so the first clause is
@@ -45,7 +84,7 @@ ws_url = "wss://api.cartesia.ai/tts/websocket"
 api_base = "https://api.cartesia.ai"
 api_version = "2026-08-14"        # Cartesia-Version header (current in the API reference)
 model = "sonic-3.6-2026-08-27"    # dated snapshot of sonic-3.6, never changes under us
-voice_id = ""                     # plan 01-32's audition fills this; until then no Cartesia
+voice_id = ""                     # `snow dev audition-voices` fills this; until then no Cartesia
 voice_name = ""
 key_name = "cartesia"
 daily_char_budget = 650           # about 20,000 free credits a month / 30 days
