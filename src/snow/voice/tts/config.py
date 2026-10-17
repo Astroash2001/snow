@@ -10,7 +10,8 @@ class _Strict(BaseModel):
 
 
 class RouterConfig(_Strict):
-    order: list[EngineName]  # D-33; consumed by the router of plan 01-28
+    order: list[EngineName]  # D-33: the first usable engine for a reply speaks it
+    cooldown_s: float  # a voice that errored mid-reply is left alone this long
 
 
 class PlayoutConfig(_Strict):
@@ -23,13 +24,24 @@ class PocketConfig(_Strict):
     torch_threads: int
 
 
+class KokoroConfig(_Strict):
+    enabled: bool
+    voice: str  # a voice in voices-v1.0.bin; bm_george is British male
+    speed: float
+    threads: int  # onnxruntime intra-op threads (measured best at 4)
+    model_url: str  # official kokoro-onnx release, fetched on first use
+    voices_url: str
+    model_sha256: str  # pinned: a file that differs is never loaded (T-01-58)
+    voices_sha256: str
+
+
 class SwitchConfig(_Strict):
     enabled: bool  # later plans add their own settings next to this
 
 
 class EnginesConfig(_Strict):
     pocket_tts: PocketConfig
-    kokoro: SwitchConfig
+    kokoro: KokoroConfig
     cartesia: SwitchConfig
     chatterbox: SwitchConfig
 

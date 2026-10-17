@@ -27,6 +27,7 @@ from snow.voice.pipeline import VoicePipeline
 from snow.voice.playout import Playout
 from snow.voice.tts.base import EngineLoadError, Samples
 from snow.voice.tts.config import TtsConfig
+from snow.voice.tts.router import VoiceRouter
 from tests.voice.conftest import FakeHub, StubSource, make_pipeline, until
 
 RATE = 24000
@@ -123,7 +124,8 @@ async def setup(
     engine = engine or FakeEngine()
     hub, speaker = FakeHub(), Speaker()
     pipeline = make_pipeline(hub, StubSource())
-    pipeline._tts, pipeline._tts_cfg = engine, TTS_CFG  # noqa: SLF001
+    pipeline._tts = VoiceRouter({"pocket_tts": engine}, TTS_CFG, pipeline._emit)  # noqa: SLF001
+    pipeline._tts_cfg = TTS_CFG  # noqa: SLF001
     pipeline._stream_factory = speaker.factory  # noqa: SLF001
     turn = StubTurnEngine(pipeline)
     turn.waiting = waiting
@@ -131,7 +133,7 @@ async def setup(
     await pipeline.start()
     if waiting:
         pipeline._pending = "t1"  # noqa: SLF001 - a turn is waiting for this reply
-    await until(lambda: pipeline._tts_state != "starting")  # noqa: SLF001
+    await until(pipeline._tts_ready.is_set)  # noqa: SLF001
     return pipeline, hub, engine, speaker, turn
 
 
@@ -266,7 +268,8 @@ async def test_a_voice_that_fails_to_load_is_reported_and_replies_stay_silent() 
 
 
 async def test_voice_status_and_health_are_published_at_start() -> None:
-    _pipeline, hub, _engine, _speaker, _turn = await setup()
+    pipeline, hub, _engine, _speaker, _turn = await setup()
+    await pipeline._q.join()  # noqa: SLF001
 
     status = of(hub, VoiceStatus)
     assert status

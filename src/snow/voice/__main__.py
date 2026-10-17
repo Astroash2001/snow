@@ -11,7 +11,9 @@ from snow.voice.pipeline import build_pipeline
 from snow.voice.sources import MicSource
 from snow.voice.stt_groq import GroqStt
 from snow.voice.stt_local import LocalStt
+from snow.voice.tts.base import EngineName, TtsEngine
 from snow.voice.tts.config import TtsConfig
+from snow.voice.tts.kokoro import KokoroEngine
 from snow.voice.tts.pocket import PocketEngine
 
 
@@ -25,14 +27,17 @@ async def _main() -> None:
     mic = MicSource(a.input_device, a.sample_rate, a.frame_samples)
     local = LocalStt(cfg.stt.local, a.sample_rate)  # loads in its own thread
     tts_cfg = load_config("tts.toml", TtsConfig)
-    pocket = tts_cfg.engines.pocket_tts
+    engines: dict[EngineName, TtsEngine] = {
+        "pocket_tts": PocketEngine(tts_cfg.engines.pocket_tts),
+        "kokoro": KokoroEngine(tts_cfg.engines.kokoro),
+    }
     pipeline = build_pipeline(
         cfg,
         client,
         mic,
         GroqStt(cfg.stt.groq, get_secret),
         local=local,
-        tts=PocketEngine(pocket) if pocket.enabled else None,  # plan 01-28: the router
+        tts=engines,  # the router loads only the engines tts.toml enables
         tts_cfg=tts_cfg,
     )
     mic.on_health = pipeline.mic_health
