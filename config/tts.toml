@@ -27,6 +27,13 @@ cooldown_s = 60.0
 # Local-engine audio starts after this much is buffered. Lower it only if the measured
 # real-time factor of the voice allows (plan 01-26 SUMMARY has the numbers).
 prebuffer_ms = 300
+# If synthesis falls behind, Snow fades out, waits for this much audio (or the end of the
+# clause) and fades back in, instead of leaving gaps for the rest of the reply.
+rebuffer_ms = 250
+# Above this synthesis real-time factor, a slow CPU (battery, load) makes Snow speak clause
+# by clause, each one only once fully synthesized. The measured RTF appears in voice.log
+# as tts_playout rtf=.
+hold_rtf = 0.7
 # VOIC-06: WebRTC echo cancellation (livekit) removes Snow's own voice from the mic, so
 # speakers work and barge-in does not hear Snow. A startup warning is logged only when
 # both settings are false (speakers, nothing removing the echo).

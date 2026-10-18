@@ -584,7 +584,11 @@ class VoicePipeline:
                 while (text := await reply.queue.get()) is not None:
                     reply.chars += len(text)
                     reply.chunks.append((text, reply.pushed))
+                    started = time.monotonic()
                     yield text
+                    # The router resumes us once it has synthesized the clause; waiting
+                    # on the LLM for the next text is outside this window.
+                    playout.clause_done(time.monotonic() - started)
 
             def push(audio: Samples) -> None:
                 reply.tts_first_audio_ns = reply.tts_first_audio_ns or time.time_ns()
@@ -657,6 +661,14 @@ class VoicePipeline:
 
     def _publish_timing(self, reply: _Reply) -> None:
         """One `turn.timing` per answered turn (an acknowledgement has no VAD stop)."""
+        if self._playout is not None and reply.spoke:  # numbers only (D-18)
+            log.info(
+                "tts_playout turn_id=%s underruns=%d rtf=%.2f hold=%s",
+                reply.turn_id,
+                self._playout.underruns,
+                self._playout.rtf,
+                self._playout.holding,
+            )
         if reply.vad_stop_ns is None:
             return
         self._emit(
