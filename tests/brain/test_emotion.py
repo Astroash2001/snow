@@ -70,3 +70,19 @@ def test_split_header_reports_whether_a_header_was_found() -> None:
         "Yes?",
     )
     assert split_header("Here are some options:", ALLOWED, "neutral")[2] is False
+
+
+def test_a_repeated_header_mid_reply_is_never_shown() -> None:
+    _, out = run("[[calm]] I'll keep my tone steady.", "[[content]]Understood, sir.")
+    assert out == "I'll keep my tone steady. Understood, sir."
+
+
+def test_a_mid_reply_tag_split_across_chunks_is_held_then_stripped() -> None:
+    parser, out = run("[[calm]] Done.", " [", "[exci", "ted|big]] Next.")
+    assert " ".join(out.split()) == "Done. Next."
+    assert parser.emotion == "calm"  # only the leading header sets the emotion
+
+
+def test_brackets_that_are_not_a_tag_are_released() -> None:
+    _, out = run("[[calm]] See [[this list]] and [x].", " Bye [")
+    assert out == "See [[this list]] and [x]. Bye "
