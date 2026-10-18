@@ -568,7 +568,7 @@ class VoicePipeline:
             await self._tts.speak(texts(), reply.emotion, reply.big_moment, push)
             playout.end_utterance()  # `_drained` follows when the last sample is out
         except Exception as e:  # noqa: BLE001 - a failed voice must not wedge the loop
-            log.error("tts_failed kind=%s", type(e).__name__)
+            log.error("tts_failed kind=%s error=%s", type(e).__name__, e)
             if playout is not None:
                 playout.abort()
             self._finish(reply)

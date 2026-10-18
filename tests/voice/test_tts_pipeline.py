@@ -23,6 +23,7 @@ from snow.contracts.events import (
     TtsSpoken,
     VoiceStatus,
 )
+from snow.voice import playout
 from snow.voice.pipeline import VoicePipeline
 from snow.voice.playout import Playout
 from snow.voice.tts.base import EngineLoadError, Samples
@@ -309,6 +310,28 @@ async def test_playout_waits_for_the_prebuffer_and_drains_exactly() -> None:
 
 
 @pytest.mark.slow
+def test_speaker_stream_opens_on_the_wasapi_default_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # PortAudio's default output is MME; WasapiSettings there fails with -9984.
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(
+        playout.sd,
+        "query_hostapis",
+        lambda: [
+            {"name": "MME", "default_output_device": 3},
+            {"name": "Windows WASAPI", "default_output_device": 11},
+        ],
+    )
+    monkeypatch.setattr(playout.sd, "OutputStream", lambda **kw: seen.update(kw))
+    playout._device_stream(RATE, 480, lambda *_: None)  # pyright: ignore[reportPrivateUsage]
+    assert seen["device"] == 11
+    assert seen["extra_settings"] is not None
+    monkeypatch.setattr(playout.sd, "query_hostapis", lambda: [{"name": "MME"}])
+    playout._device_stream(RATE, 480, lambda *_: None)  # pyright: ignore[reportPrivateUsage]
+    assert (seen["device"], seen["extra_settings"]) == (None, None)
+
+
 async def test_real_pocket_tts_speaks_one_sentence_on_the_cpu(
     record_property: Any,
 ) -> None:

@@ -39,15 +39,29 @@ StreamFactory = Callable[[int, int, Callable[..., None]], OutputStream]
 def _device_stream(
     rate: int, block: int, callback: Callable[..., None]
 ) -> OutputStream:
+    index = _wasapi_output()
     stream: Any = sd.OutputStream(  # pyright: ignore[reportUnknownMemberType]
         samplerate=rate,
         channels=1,
         dtype="float32",
         blocksize=block,
         callback=callback,
-        extra_settings=sd.WasapiSettings(auto_convert=True),  # pyright: ignore[reportUnknownMemberType]
+        device=index,
+        # WasapiSettings on a non-WASAPI device fails with PaErrorCode -9984.
+        extra_settings=sd.WasapiSettings(auto_convert=True)  # pyright: ignore[reportUnknownMemberType]
+        if index is not None
+        else None,
     )
     return stream
+
+
+def _wasapi_output() -> int | None:
+    """Index of the WASAPI default output; PortAudio's own default is MME on Windows."""
+    wasapi = next(
+        (h for h in sd.query_hostapis() if "WASAPI" in h["name"]),  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType, reportGeneralTypeIssues]
+        None,
+    )
+    return None if wasapi is None else int(wasapi["default_output_device"])  # pyright: ignore[reportUnknownArgumentType]
 
 
 def level_of(block: npt.NDArray[np.float32]) -> float:
