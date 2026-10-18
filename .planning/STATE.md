@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Always-On Voice Loop
 status: executing
 stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-10-18T13:35:44.876Z"
+last_updated: "2026-10-18T20:38:20.063Z"
 last_activity: 2026-10-18
 last_activity_desc: Phase 01 execution started
-state_head: 5acacd125c808ebe6c9008a50e2ee7c5e344ac15
+state_head: 17d6386aca65acc1ecf00e1de4173c015b08a543
 progress:
   total_phases: 7
   completed_phases: 0
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-13)
 Phase: 01 (Always-On Voice Loop) — EXECUTING
 Plan: 1 of 33
 Status: Executing Phase 01
-Last activity: 2026-10-18 - Completed quick task 261018-glq: real echo cancellation (livekit APM)
+Last activity: 2026-10-19 - Completed quick task 261018-pvq: voice robustness batch
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -85,6 +85,7 @@ None yet.
 | 261018-glq | Real echo cancellation (livekit APM) so Snow works on laptop speakers and mic | 2026-10-18 | 10b4e0d | [261018-glq-real-echo-cancellation-livekit-apm-so-sn](./quick/261018-glq-real-echo-cancellation-livekit-apm-so-sn/) |
 | 2 | Hardware echo test: raw vs clean diagnostics while the user talks | 2026-10-18 | 561490a | — |
 | 3 | Strip emotion tags repeated mid-reply | 2026-10-18 | 5acacd1 | — |
+| 261018-pvq | Voice robustness batch: priority, playout rebuffer, sleep-aware supervisor, Groq STT filter | 2026-10-19 | 17d6386 | [261018-pvq-voice-robustness-batch-priority-playout-](./quick/261018-pvq-voice-robustness-batch-priority-playout-/) |
 
 ## Deferred Items
 
