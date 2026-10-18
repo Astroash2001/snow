@@ -126,7 +126,9 @@ class TimedSpeaker(Speaker):
         return self.stream
 
 
-async def make_rig(groq: FakeGroq, voice: FakeEngine) -> Rig:
+async def make_rig(
+    groq: FakeGroq, voice: FakeEngine, *, echo_cancel: bool = False
+) -> Rig:
     groq.text = "what time is it"
     hub, vad = FakeHub(), Vad()
     turn = TurnEngine(CFG.turn, vad, AlwaysComplete(), conversation=CFG.conversation)
@@ -135,7 +137,16 @@ async def make_rig(groq: FakeGroq, voice: FakeEngine) -> Rig:
         lambda _n: Secret("gsk_test_key_not_real"),
         transport=httpx2.MockTransport(groq.handler),
     )
-    pipeline = VoicePipeline(CFG, hub, StubSource(), NoWake(), turn, stt, "voice")  # type: ignore[arg-type]
+    pipeline = VoicePipeline(
+        CFG,
+        hub,
+        StubSource(),  # type: ignore[arg-type]
+        NoWake(),  # type: ignore[arg-type]
+        turn,
+        stt,
+        "voice",
+        echo_cancel=echo_cancel,
+    )
     pipeline._tone.analyze = lambda *a: None  # type: ignore[method-assign,assignment]  # noqa: SLF001
     rig: Rig
     speaker = TimedSpeaker(lambda: rig.aborts.append(rig.mic))

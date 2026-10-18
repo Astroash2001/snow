@@ -19,6 +19,7 @@ dependencies = [
     "soundfile",
     "moonshine-voice==0.1.5",
     "pocket-tts==3.3.0",
+    "livekit==1.1.20",
 ]
 
 [project.scripts]
