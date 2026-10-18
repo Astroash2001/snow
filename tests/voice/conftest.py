@@ -76,6 +76,24 @@ def reply_to(heard: TranscriptFinal) -> ReplyFinal:
     )
 
 
+def verbose_segment(
+    text: str, no_speech_prob: float, avg_logprob: float
+) -> dict[str, Any]:
+    """One segment of a Groq verbose_json answer (all TranscriptionSegment fields)."""
+    return {
+        "id": 0,
+        "seek": 0,
+        "start": 0.0,
+        "end": 1.0,
+        "text": text,
+        "tokens": [1, 2],
+        "temperature": 0.0,
+        "avg_logprob": avg_logprob,
+        "compression_ratio": 1.0,
+        "no_speech_prob": no_speech_prob,
+    }
+
+
 @dataclass
 class FakeGroq:
     """Records uploads; replies with `text` as the transcription."""
@@ -84,6 +102,8 @@ class FakeGroq:
     texts: list[str] = field(default_factory=list[str])  # per request, then `text`
     fail_with: int | None = None  # answer every request with this HTTP status
     retry_after: str | None = None
+    no_speech_prob: float = 0.01  # confident speech unless a test says otherwise
+    avg_logprob: float = -0.2
     requests: list[httpx2.Request] = field(default_factory=list[httpx2.Request])
     violations: list[str] = field(default_factory=list[str])
 
@@ -100,7 +120,17 @@ class FakeGroq:
                     self.fail_with, json={"error": {"message": "no"}}, headers=headers
                 )
             text = self.texts.pop(0) if self.texts else self.text
-            return httpx2.Response(200, json={"text": text})
+            return httpx2.Response(
+                200,
+                json={
+                    "text": text,
+                    "language": "en",
+                    "duration": 1.0,
+                    "segments": [
+                        verbose_segment(text, self.no_speech_prob, self.avg_logprob)
+                    ],
+                },
+            )
         self.violations.append(f"{request.method} {request.url}")
         return httpx2.Response(599)
 

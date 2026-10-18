@@ -43,6 +43,7 @@ mute = ["mute", "snow mute", "mute yourself", "snow mute yourself"]
 [stt]
 final_deadline_s = 2.5 # Groq must answer within this, else the local final is used (T-01-38)
 cooldown_s = 60        # a failed Groq is not called again for this long
+min_voiced_s = 0.3     # a turn with less voiced sound than this (a cough, a click) is dropped before any Groq request
 
 [stt.local]
 model = "tiny"         # Moonshine streaming; the base size has no streaming build in 0.1.5
@@ -54,6 +55,16 @@ key_name = "groq"
 model = "whisper-large-v3-turbo"
 language = "en"
 timeout_s = 8
+# Whisper spelling hints (up to 224 tokens). "Jarvis" helps the wake-phrase strip patterns
+# catch the stand-in wake word; change it together with the wake word.
+prompt = "Hey Jarvis. Snow, Claude Code, Antigravity, OpenCode."
+# A turn is dropped (no transcript, no reply) when every segment has no_speech_prob at or
+# above the first and avg_logprob at or below the second: Whisper's own silence rule. The
+# gap study suggested the tighter 0.4 / -0.5; this is the safer start because the mic sits
+# 12-18 dB under reference and a dropped real command costs more than a rare hallucination
+# letting through. Tune it from the groq_stt lines in voice.log.
+silent_no_speech_prob = 0.6
+silent_avg_logprob = -1.0
 
 [tone]
 # Prosody (loudness, pitch, pace) always runs. The emotion model is off: the only small

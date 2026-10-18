@@ -61,6 +61,40 @@ def fetch_model(cfg: ToneConfig, dest: Path | None = None) -> Path:
     return path
 
 
+def _voiced(pcm: bytes, sample_rate: int) -> tuple[np.ndarray, float, float, float]:
+    """(samples, voiced threshold, voiced seconds, voiced dBFS) of 16-bit mono PCM."""
+    x = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+    n = int(_FRAME_S * sample_rate)
+    frames = x[: len(x) // n * n].reshape(-1, n)
+    rms = np.sqrt((frames**2).mean(axis=1)) if len(frames) else np.zeros(0)
+    floor = 10 ** (_VOICED_FLOOR_DBFS / 20)
+    thr = max(
+        float(np.percentile(rms, 95)) * 10 ** (-_VOICED_BELOW_PEAK_DB / 20)
+        if len(rms)
+        else 0.0,
+        floor,
+    )
+    voiced = rms > thr
+    # Short pauses between words still count as speech for the pace.
+    spoken = np.convolve(voiced, np.ones(2 * _BRIDGE_FRAMES + 1), "same") > 0
+    if voiced.any():  # bridge gaps only: the clip's lead-in and tail are not speech
+        on = np.flatnonzero(voiced)
+        spoken[: on[0]] = spoken[on[-1] + 1 :] = False
+    voiced_s = float(spoken.sum()) * _FRAME_S
+    loudness = (
+        20 * np.log10(max(float(np.sqrt((frames[voiced] ** 2).mean())), 1e-9))
+        if voiced.any()
+        else -100.0
+    )
+    return x, thr, voiced_s, float(loudness)
+
+
+def voiced_level(pcm: bytes, sample_rate: int) -> tuple[float, float]:
+    """(voiced seconds, voiced dBFS) of a turn; -100.0 dBFS when nothing is voiced."""
+    _, _, voiced_s, dbfs = _voiced(pcm, sample_rate)
+    return voiced_s, dbfs
+
+
 class ToneAnalyzer:
     def __init__(self, cfg: ToneConfig, models_dir: Path | None = None) -> None:
         self._cfg = cfg
@@ -91,29 +125,7 @@ class ToneAnalyzer:
         return self._session is not None
 
     def analyze(self, pcm: bytes, text: str, sample_rate: int = 16000) -> Tone:
-        x = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
-        n = int(_FRAME_S * sample_rate)
-        frames = x[: len(x) // n * n].reshape(-1, n)
-        rms = np.sqrt((frames**2).mean(axis=1)) if len(frames) else np.zeros(0)
-        floor = 10 ** (_VOICED_FLOOR_DBFS / 20)
-        thr = max(
-            float(np.percentile(rms, 95)) * 10 ** (-_VOICED_BELOW_PEAK_DB / 20)
-            if len(rms)
-            else 0.0,
-            floor,
-        )
-        voiced = rms > thr
-        # Short pauses between words still count as speech for the pace.
-        spoken = np.convolve(voiced, np.ones(2 * _BRIDGE_FRAMES + 1), "same") > 0
-        if voiced.any():  # bridge gaps only: the clip's lead-in and tail are not speech
-            on = np.flatnonzero(voiced)
-            spoken[: on[0]] = spoken[on[-1] + 1 :] = False
-        voiced_s = float(spoken.sum()) * _FRAME_S
-        loudness = (
-            20 * np.log10(max(float(np.sqrt((frames[voiced] ** 2).mean())), 1e-9))
-            if voiced.any()
-            else -100.0
-        )
+        x, thr, voiced_s, loudness = _voiced(pcm, sample_rate)
         wpm = len(text.split()) / (voiced_s / 60) if voiced_s > 0 else 0.0
         pace, loud = self._categories(wpm, float(loudness))
         emotion, confidence = self._emotion(x)

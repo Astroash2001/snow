@@ -52,6 +52,11 @@ class GroqConfig(_Strict):
     model: str
     language: str
     timeout_s: float
+    prompt: str  # spelling hints for Whisper, up to 224 tokens; empty omits it
+    silent_no_speech_prob: (
+        float  # a turn is silent when every segment is at or above this
+    )
+    silent_avg_logprob: float  # ... and at or below this
 
 
 class LocalSttConfig(_Strict):
@@ -62,6 +67,7 @@ class LocalSttConfig(_Strict):
 class SttConfig(_Strict):
     final_deadline_s: float  # Groq gets this long, then the local final is used
     cooldown_s: float  # how long a failed Groq is left alone
+    min_voiced_s: float  # a turn with less voiced sound than this is dropped
     groq: GroqConfig
     local: LocalSttConfig
 

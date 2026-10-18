@@ -2,19 +2,30 @@
 
 The turn goes up as one in-memory WAV, never a file (D-18), and only for a turn a wake
 phrase opened. Failures become `SttUnavailable` so a router can fall back to local STT.
+
+The request asks for `verbose_json` so each segment carries Whisper's own confidence
+(`no_speech_prob`, `avg_logprob`), at temperature 0 and with the vocabulary prompt from
+voice.toml. A turn whose every segment looks silent returns "" and so gets no reply;
+only numbers are logged, never the transcript (D-18).
 """
 
 import io
+import logging
 import wave
 from collections.abc import Callable
 from typing import Literal
 
 import httpx2
 import openai
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, omit
 
 from snow.config.secrets import Secret
 from snow.voice.config import GroqConfig
+
+log = logging.getLogger("snow.voice")
+
+# Groq recommends 0 for transcription; it removes sampling randomness on short clips.
+_TEMPERATURE = 0
 
 SttKind = Literal["no_key", "rate_limited", "unreachable", "offline"]
 
@@ -77,7 +88,9 @@ class GroqStt:
                 model=self._cfg.model,
                 file=("turn.wav", wav_bytes(pcm, sample_rate), "audio/wav"),
                 language=self._cfg.language,
-                response_format="json",
+                response_format="verbose_json",
+                temperature=_TEMPERATURE,
+                prompt=self._cfg.prompt or omit,
             )
         except openai.RateLimitError as e:
             raise SttUnavailable("rate_limited", _retry_after(e.response)) from e
@@ -91,4 +104,21 @@ class GroqStt:
             raise SttUnavailable("unreachable") from e
         finally:
             await client.close()
-        return result.text
+        segs = result.segments or []
+        if not segs:  # fail open: no confidence data means trust the text
+            return result.text
+        nsp = min(s.no_speech_prob for s in segs)
+        alp = max(s.avg_logprob for s in segs)
+        # Every segment at or above the first threshold and at or below the second.
+        silent = (
+            nsp >= self._cfg.silent_no_speech_prob
+            and alp <= self._cfg.silent_avg_logprob
+        )
+        log.info(
+            "groq_stt segments=%d no_speech_prob=%.2f avg_logprob=%.2f silent=%s",
+            len(segs),
+            nsp,
+            alp,
+            silent,
+        )
+        return "" if silent else result.text
