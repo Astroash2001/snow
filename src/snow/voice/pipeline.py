@@ -500,6 +500,8 @@ class VoicePipeline:
                         "aec_unavailable kind=%s barge_in_hears_snow", type(e).__name__
                     )
             aec = self._aec
+            if aec is not None:
+                self._engine.echo_warming = aec.warming
             self._playout = Playout(
                 router.sample_rate,
                 self._tts_cfg.playout,

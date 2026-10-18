@@ -5,17 +5,27 @@ a fixture phrase, the room is a seeded decaying-noise impulse response, all in m
 The numbers are deterministic for the pinned livekit and a fixed seed.
 """
 
+import threading
+from collections.abc import Callable
+
 import numpy as np
 import numpy.typing as npt
 import pytest
 
+from snow.contracts.events import TtsSpoken
 from snow.voice.aec import EchoCanceller
 from snow.voice.playout import Playout
 from snow.voice.sources import read_wav
 from snow.voice.vad import VadDetector
 from tests.voice.conftest import AUDIO, CFG, FakeGroq
-from tests.voice.test_bargein import HoldEngine, make_rig
-from tests.voice.test_tts_pipeline import TTS_CFG, Speaker
+from tests.voice.test_bargein import HoldEngine, ask, make_rig, start_reply
+from tests.voice.test_tts_pipeline import (
+    TTS_CFG,
+    FakeEngine,
+    Speaker,
+    of,
+    play_out,
+)
 
 SR, TR = 16000, 24000
 CHUNK = 512
@@ -104,30 +114,34 @@ def erle_db(raw: Pcm, out: Pcm, start_s: float) -> float:
 
 
 class Scene:
-    """utt1, a 2 s silence, utt2: the second reply is the warm one."""
+    """utt1, a 2 s silence, utt2: the second reply is the warm one. `extra_s` of
+    silence after the echo leaves room for a user to talk on."""
 
     def __init__(
-        self, delay_ms: int = 120, level: float = -26.0, seed: int = 0
+        self,
+        delay_ms: int = 120,
+        level: float = -26.0,
+        seed: int = 0,
+        extra_s: float = 0.0,
     ) -> None:
         a24, a16 = far_of("phrase_thats_all", "tone_calm", gap_s=0.3)
         b24, b16 = far_of("phrase_go_to_sleep")
-        gap24, gap16 = (
-            np.zeros(2 * TR, dtype=np.int16),
-            np.zeros(2 * SR, dtype=np.int16),
+        gap = 2 * SR  # the silence between the two replies
+        tail = SR + int(extra_s * SR)  # the echo finishes in the first second
+        far16 = np.concatenate([a16, np.zeros(gap, np.int16), b16])
+        self.utt2_s = (len(a16) + gap) / SR
+        echo = echo_of(far16, delay_ms, level, seed)
+        self.echo = np.concatenate([echo, np.zeros(tail)])
+        self.far24 = np.concatenate(
+            [a24, np.zeros(2 * TR, np.int16), b24, np.zeros(tail * TR // SR, np.int16)]
         )
-        pad = np.zeros(SR, dtype=np.int16)  # a second of tail so the echo finishes
-        self.far24 = np.concatenate([a24, gap24, b24, np.zeros(TR, dtype=np.int16)])
-        far16 = np.concatenate([a16, gap16, b16, pad])
-        self.utt2_s = (len(a16) + len(gap16)) / SR
-        self.echo = echo_of(far16, delay_ms, level, seed)
-        self.noise = noise(len(far16), seed)
-        n = len(far16) // FRAME * FRAME
-        self.n = n
+        self.noise = noise(len(self.echo), seed)
+        self.n = len(self.echo) // FRAME * FRAME
 
     def mic(self, user: Pcm | None = None) -> Pcm:
         x = self.echo + self.noise
         if user is not None:
-            x = x + user.astype(np.float64)
+            x = x + np.pad(user.astype(np.float64), (0, len(x) - len(user)))
         return to_pcm(x)[: self.n]
 
 
@@ -201,3 +215,125 @@ async def test_the_pipeline_leaves_frames_alone_when_disabled(groq: FakeGroq) ->
     rig = await make_rig(groq, HoldEngine(hold_from=2))
     assert rig.pipeline._aec is None  # noqa: SLF001
     await rig.pipeline.stop()
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2, 3])
+@pytest.mark.parametrize("delay_ms", [60, 120, 250])
+def test_warm_residual_sweep(seed: int, delay_ms: int) -> None:
+    scene = Scene(delay_ms=delay_ms, seed=seed)
+    aec = EchoCanceller(SR, TR)
+    out = drive(aec, scene.far24, scene.mic())
+    aec.close()
+    assert longest_run_ms(out, scene.utt2_s) < MIN_RUN_MS
+    assert erle_db(to_pcm(scene.echo), out, scene.utt2_s + 1.0) >= 20
+
+
+def speech_flags(pcm: Pcm) -> npt.NDArray[np.bool_]:
+    _VAD.reset()
+    return np.array(
+        [
+            _VAD.speech_prob(pcm[i : i + CHUNK]) >= CFG.turn.vad_threshold
+            for i in range(0, len(pcm) - CHUNK + 1, CHUNK)
+        ]
+    )
+
+
+def detected_at_s(flags: npt.NDArray[np.bool_], after_s: float) -> float | None:
+    """When a run of barge_in_min_ms of speech completes, searching from `after_s`."""
+    need = -(-MIN_RUN_MS * SR // (1000 * CHUNK))  # chunks, rounded up
+    run = 0
+    for i in range(int(after_s * SR) // CHUNK, len(flags)):
+        run = run + 1 if flags[i] else 0
+        if run >= need:
+            return (i + 1) * CHUNK / SR
+    return None
+
+
+def test_the_user_talking_over_snow_still_gets_through() -> None:
+    scene = Scene(extra_s=6.0)
+    user_16 = read_wav(AUDIO / "mid_thought_pause.wav", SR).astype(np.float64)
+    user_16 *= 10 ** (-32 / 20) * 32768 / np.sqrt(np.mean(user_16**2))
+    user = np.concatenate([np.zeros(int((scene.utt2_s + 1.5) * SR)), user_16])
+    user = to_pcm(np.pad(user, (0, max(0, scene.n - len(user))))[: scene.n])
+    aec = EchoCanceller(SR, TR)
+    out = drive(aec, scene.far24, scene.mic(user))
+    aec.close()
+
+    alone = speech_flags(to_pcm(user.astype(np.float64) + scene.noise[: len(user)]))
+    cleaned = speech_flags(out)
+    assert alone.sum() > 50
+    assert (alone & cleaned).sum() >= 0.7 * alone.sum()
+    start = scene.utt2_s + 1.5
+    ideal, got = detected_at_s(alone, start), detected_at_s(cleaned, start)
+    assert ideal is not None and got is not None
+    assert got - ideal <= 0.7
+
+
+def test_render_and_capture_on_two_threads_is_safe() -> None:
+    aec = EchoCanceller(SR, TR)
+    errors: list[BaseException] = []
+    block = np.full(480, 0.1, dtype=np.float32)
+    frame = np.full(FRAME, 300, dtype=np.int16)
+
+    def loop(fn: Callable[[], object]) -> None:
+        try:
+            for _ in range(500):
+                fn()
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [
+        threading.Thread(target=loop, args=(lambda: aec.render(block),)),
+        threading.Thread(target=loop, args=(lambda: aec.capture(frame),)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert aec._apm is not None  # noqa: SLF001 - neither side fell back to pass-through
+    aec.close()
+
+
+class _Broken:
+    def process_stream(self, frame: object) -> None:
+        raise RuntimeError("native failure")
+
+    process_reverse_stream = process_stream
+
+
+def test_a_failing_apm_passes_audio_through_and_never_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    aec = EchoCanceller(SR, TR)
+    aec._apm = _Broken()  # type: ignore[assignment]  # noqa: SLF001
+    frame = np.arange(FRAME, dtype=np.int16)
+
+    with caplog.at_level("ERROR", logger="snow.voice"):
+        aec.render(np.zeros(480, dtype=np.float32))  # must not raise into PortAudio
+        assert aec._apm is None  # noqa: SLF001
+        assert np.array_equal(aec.capture(frame), frame)
+        aec.render(np.zeros(480, dtype=np.float32))
+    assert [r.getMessage() for r in caplog.records] == ["aec_failed kind=RuntimeError"]
+    aec.close()
+    aec.close()
+
+
+async def test_a_canceller_that_cannot_load_leaves_the_voice_working(
+    groq: FakeGroq,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def broken(*_args: object) -> EchoCanceller:
+        raise ImportError("livekit")
+
+    monkeypatch.setattr("snow.voice.pipeline.EchoCanceller", broken)
+    with caplog.at_level("WARNING", logger="snow.voice"):
+        rig = await make_rig(groq, FakeEngine(), echo_cancel=True)
+    assert rig.pipeline._aec is None  # noqa: SLF001
+    assert "aec_unavailable kind=ImportError barge_in_hears_snow" in caplog.text
+
+    turn_id = await ask(rig)
+    await start_reply(rig, turn_id, blocks=3)
+    await play_out(rig.pipeline, rig.hub, rig.speaker)
+    assert of(rig.hub, TtsSpoken)

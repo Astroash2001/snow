@@ -276,3 +276,41 @@ async def test_200_ms_of_speech_over_snow_is_not_a_barge_in(groq: FakeGroq) -> N
     assert of(rig.hub, TurnCancelled) == [] and of(rig.hub, ReplyInterrupted) == []
     assert rig.pipeline._reply is not None  # noqa: SLF001
     assert voice.cancelled == 0
+
+
+async def test_a_352_ms_burst_over_a_warming_canceller_is_not_a_barge_in(
+    groq: FakeGroq,
+) -> None:
+    """A cold canceller leaves residual up to 352 ms; while warming it cannot cut in."""
+    rig = await make_rig(groq, HoldEngine(hold_from=2))
+    turn_id = await ask(rig)
+    rig.turn.echo_warming = lambda: True
+    await start_reply(rig, turn_id, blocks=10)
+
+    rig.hear(352, speech=True)
+    rig.hear(300, speech=False)
+    await asyncio.sleep(0.05)
+
+    assert rig.aborts == []
+    assert of(rig.hub, TurnCancelled) == [] and of(rig.hub, ReplyInterrupted) == []
+    assert rig.pipeline._reply is not None  # noqa: SLF001
+
+
+async def test_warm_up_barge_in_needs_600_ms_and_keeps_the_whole_onset(
+    groq: FakeGroq,
+) -> None:
+    rig = await make_rig(groq, HoldEngine(hold_from=2))
+    turn_id = await ask(rig)
+    rig.turn.echo_warming = lambda: True
+    await start_reply(rig, turn_id, blocks=10)
+
+    rig.hear(100, speech=False)
+    rig.hear(640, speech=True)  # 20 chunks: the barge-in fires on the 19th (608 ms)
+    assert rig.aborts, "playback was not aborted"
+    await until(lambda: bool(of(rig.hub, ReplyInterrupted)))
+
+    rig.hear(320, speech=True)
+    rig.hear(500, speech=False)
+    await until(lambda: len(of(rig.hub, TranscriptFinal)) == 2)
+    pcm = np.frombuffer(rig.turn_pcm[-1], dtype=np.int16)
+    assert int(np.count_nonzero(pcm == SPEECH)) == 30 * CHUNK  # every speech chunk

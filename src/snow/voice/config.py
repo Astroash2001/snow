@@ -32,6 +32,7 @@ class TurnConfig(_Strict):
     max_turn_secs: float
     wake_alone_window_s: float
     barge_in_min_ms: int
+    barge_in_warmup_min_ms: int  # while the echo canceller is still adapting
 
 
 class ConversationConfig(_Strict):
