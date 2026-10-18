@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Always-On Voice Loop
 status: executing
 stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-10-15T17:54:38.862Z"
-last_activity: 2026-10-15
+last_updated: "2026-10-18T13:16:59.866Z"
+last_activity: 2026-10-18
 last_activity_desc: Phase 01 execution started
-state_head: 69fae051a8308f383f122131309586816035d2f5
+state_head: 10b4e0d99699cef9c3bf9a1f2707dfd6d5c06a06
 progress:
   total_phases: 7
   completed_phases: 0
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-13)
 Phase: 01 (Always-On Voice Loop) — EXECUTING
 Plan: 1 of 33
 Status: Executing Phase 01
-Last activity: 2026-10-15 — Phase 01 execution started
+Last activity: 2026-10-18 - Completed quick task 261018-glq: real echo cancellation (livekit APM)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -77,6 +77,12 @@ None yet.
 - [Phase 2]: Claude Code account is borrowed; confirm Agent SDK headless permission behaviour and account terms
 - [Phase 5]: WhatsApp Desktop automation carries account-ban risk; confirm the target app before planning
 - [General]: Cartesia free tier is 20K credits/month (about 27 min, no cloning); by design (Phase 1 D-33) Pocket TTS carries everyday speech and Cartesia only big moments
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261018-glq | Real echo cancellation (livekit APM) so Snow works on laptop speakers and mic | 2026-10-18 | 10b4e0d | [261018-glq-real-echo-cancellation-livekit-apm-so-sn](./quick/261018-glq-real-echo-cancellation-livekit-apm-so-sn/) |
 
 ## Deferred Items
 
