@@ -1,9 +1,11 @@
 """The one client every worker (and dev tool) uses to talk to the hub (CORE-03)."""
 
 import asyncio
+import faulthandler
 import json
 import logging
 import os
+import sys
 import time
 from collections.abc import Awaitable, Callable
 
@@ -37,6 +39,26 @@ CommandHandler = Callable[[Command], Awaitable[None]]
 SnapshotHandler = Callable[[Snapshot], Awaitable[None]]
 
 
+def _stall_seconds() -> float | None:
+    """SNOW_STALL_DUMP_S from the supervisor; missing or malformed means off."""
+    try:
+        seconds = float(os.environ["SNOW_STALL_DUMP_S"])
+    except (KeyError, ValueError):
+        return None
+    return seconds if seconds > 0 else None
+
+
+def arm_stall_dump(seconds: float) -> None:
+    """Write this process's Python stacks to stderr if not re-armed within `seconds`.
+
+    The hub cannot read another process's stacks on Windows, so a stalled worker
+    writes its own, every `seconds`, until the hub kills it. Output is file, line and
+    function names only: no locals, so no transcript text (D-18).
+    """
+    if sys.stderr is not None:
+        faulthandler.dump_traceback_later(seconds, repeat=True)
+
+
 class HubClient:
     def __init__(
         self,
@@ -57,6 +79,7 @@ class HubClient:
         self.connected = asyncio.Event()
         self._ws: ClientConnection | None = None
         self._tasks: set[asyncio.Task[None]] = set()
+        self._stall_s = _stall_seconds()
 
     def _target(self) -> tuple[str, str]:
         """Env/arguments win; else read hub.json fresh so a restarted hub is found."""
@@ -122,11 +145,16 @@ class HubClient:
         task.add_done_callback(self._tasks.discard)
 
     async def _heartbeat(self) -> None:
-        while True:
-            await self.publish(
-                Heartbeat(ts_ns=time.time_ns(), source=self.role, worker=self.role)
-            )
-            await asyncio.sleep(HEARTBEAT_S)
+        try:
+            while True:
+                await self.publish(
+                    Heartbeat(ts_ns=time.time_ns(), source=self.role, worker=self.role)
+                )
+                if self._stall_s is not None:
+                    arm_stall_dump(self._stall_s)
+                await asyncio.sleep(HEARTBEAT_S)
+        finally:  # a lost hub connection must not leave a timer that dumps spuriously
+            faulthandler.cancel_dump_traceback_later()
 
     async def _send(self, text: str) -> None:
         ws = self._ws
