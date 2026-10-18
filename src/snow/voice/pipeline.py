@@ -35,6 +35,7 @@ from snow.contracts.events import (
     WakeDetected,
 )
 from snow.contracts.wire import Command, MuteSet, Snapshot
+from snow.voice.aec import EchoCanceller
 from snow.voice.config import VoiceConfig
 from snow.voice.phrases import match_command, strip_wake
 from snow.voice.playout import Playout, StreamFactory
@@ -118,6 +119,7 @@ class VoicePipeline:
         tts: Mapping[EngineName, TtsEngine] | None = None,
         tts_cfg: TtsConfig | None = None,
         stream_factory: StreamFactory | None = None,
+        echo_cancel: bool = False,
     ) -> None:
         self._cfg = cfg
         self._hub = hub
@@ -163,6 +165,9 @@ class VoicePipeline:
         )
         self._tts_cfg = tts_cfg
         self._stream_factory = stream_factory
+        # Echo cancellation (VOIC-06): only the worker's live mic turns it on.
+        self._echo_cancel = echo_cancel
+        self._aec: EchoCanceller | None = None
         self._tts_ready: asyncio.Event
         self._playout: Playout | None = None
         self._chunker = SentenceChunker()
@@ -186,7 +191,11 @@ class VoicePipeline:
         self._tts_ready = asyncio.Event()
         self._publish_health()
         self._router.announce()
-        if self._tts_cfg is not None and not self._tts_cfg.playout.assume_headphones:
+        if (
+            self._tts_cfg is not None
+            and not self._tts_cfg.playout.assume_headphones
+            and not self._echo_cancel
+        ):
             log.warning("speakers_without_echo_cancellation barge_in_hears_snow")
         if self._tts is not None:
             self._tts.start()
@@ -312,6 +321,8 @@ class VoicePipeline:
             self._tts.stop()
         if self._playout is not None:
             self._playout.close()
+        if self._aec is not None:
+            self._aec.close()
         for task in [self._publisher_task, *self._tasks]:
             task.cancel()
 
@@ -331,6 +342,9 @@ class VoicePipeline:
     # --- audio thread -----------------------------------------------------------
 
     def _on_frame(self, frame: Frame) -> None:
+        aec = self._aec
+        if aec is not None:  # first, so wake, VAD, STT and tone hear cleaned audio
+            frame = aec.capture(frame)
         self._recent.append(frame)
         if self._local_turn:
             self._feed_local(frame)
@@ -476,12 +490,25 @@ class VoicePipeline:
     async def _load_tts(self, router: VoiceRouter) -> None:
         assert self._tts_cfg is not None  # noqa: S101 - a router comes with its config
         if await router.wait_ready():
+            if self._echo_cancel:
+                try:  # ~0.9 s of import and setup: off the loop
+                    self._aec = await asyncio.to_thread(
+                        EchoCanceller, self._cfg.audio.sample_rate, router.sample_rate
+                    )
+                except Exception as e:  # noqa: BLE001 - audio then passes through
+                    log.warning(
+                        "aec_unavailable kind=%s barge_in_hears_snow", type(e).__name__
+                    )
+            aec = self._aec
+            if aec is not None:
+                self._engine.echo_warming = aec.warming
             self._playout = Playout(
                 router.sample_rate,
                 self._tts_cfg.playout,
                 on_first_audio=lambda ts_ns: self._hop(self._first_audio, ts_ns),
                 on_level=lambda level: self._hop(self._tts_level, level),
                 on_drained=lambda: self._hop(self._drained),
+                on_render=aec.render if aec is not None else (lambda block: None),
                 stream_factory=self._stream_factory,
             )
         self._tts_ready.set()  # no playout: no voice loaded, replies stay silent
@@ -741,6 +768,7 @@ def build_pipeline(
     tts: Mapping[EngineName, TtsEngine] | None = None,
     tts_cfg: TtsConfig | None = None,
     stream_factory: StreamFactory | None = None,
+    echo_cancel: bool = False,
 ) -> VoicePipeline:
     """Real wake gate, VAD and Smart Turn wired to `source` (worker and dev tool)."""
     rate, w = cfg.audio.sample_rate, cfg.wake
@@ -766,4 +794,5 @@ def build_pipeline(
         tts,
         tts_cfg,
         stream_factory,
+        echo_cancel,
     )

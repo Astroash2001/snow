@@ -18,7 +18,9 @@ class RouterConfig(_Strict):
 
 class PlayoutConfig(_Strict):
     prebuffer_ms: int
-    assume_headphones: bool  # no echo cancellation in v1: barge-in needs headphones
+    # Headphones need no echo canceller; on speakers barge-in relies on it.
+    assume_headphones: bool
+    echo_cancellation: bool  # the live worker runs the WebRTC canceller (VOIC-06)
 
 
 # D-05: whose voice a reference clip is. A clip without one of these is refused at load,

@@ -1,8 +1,9 @@
 """Speaker output: a ring buffer behind one WASAPI stream, with levels and drain events.
 
 Audio only ever lives in memory (D-18). The device callback runs on PortAudio's thread,
-so the three callbacks (`on_first_audio`, `on_level`, `on_drained`) run there
-and must only hop onto the event loop.
+so the callbacks (`on_render`, `on_first_audio`, `on_level`, `on_drained`) run there
+and must only hop onto the event loop. `on_render` gets every block played, silent ones
+too: it is the echo canceller's reference (VOIC-06) and must be fast and never raise.
 """
 
 import collections
@@ -80,6 +81,7 @@ class Playout:
         on_first_audio: Callable[[int], None] = lambda ts_ns: None,
         on_level: Callable[[float], None] = lambda level: None,
         on_drained: Callable[[], None] = lambda: None,
+        on_render: Callable[[npt.NDArray[np.float32]], None] = lambda block: None,
         stream_factory: StreamFactory | None = None,
     ) -> None:
         self.sample_rate = sample_rate
@@ -88,6 +90,7 @@ class Playout:
         self.on_first_audio = on_first_audio
         self.on_level = on_level
         self.on_drained = on_drained
+        self.on_render = on_render
         self._factory = stream_factory or _device_stream
         self._stream: OutputStream | None = None
         self._lock = threading.Lock()
@@ -179,6 +182,7 @@ class Playout:
                     drained = True
                     self._reset_utterance()
             speaking = filled > 0
+        self.on_render(out)  # speech or zeros: the reference has no gaps
         if first:
             self.on_first_audio(time.time_ns())
         if speaking:

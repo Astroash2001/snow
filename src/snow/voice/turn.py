@@ -7,6 +7,7 @@ behave identically. Framework-free: VAD and end-of-turn come in through small pr
 import math
 import uuid
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Protocol
@@ -130,6 +131,8 @@ class TurnEngine:
         self._vad = vad
         self._eot = eot
         self.events: EngineEvents = events or NullEvents()
+        # True while the echo canceller is still adapting; set by the pipeline.
+        self.echo_warming: Callable[[], bool] = lambda: False
         self._sr = sample_rate
         self.state = State.SLEEPING
         self._turn: _Turn | None = None
@@ -141,7 +144,8 @@ class TurnEngine:
         # Barge-in (VOIC-06): Snow is audibly speaking; the user's voice may cut it off.
         self._speaking_out = False
         self._barge_run = 0  # consecutive speech samples heard over the reply
-        ring = math.ceil((cfg.barge_in_min_ms / 1000 + _BARGE_LEAD_S) * sample_rate)
+        longest = max(cfg.barge_in_min_ms, cfg.barge_in_warmup_min_ms)
+        ring = math.ceil((longest / 1000 + _BARGE_LEAD_S) * sample_rate)
         self._ring: deque[Pcm] = deque(maxlen=math.ceil(ring / CHUNK))
         # Loop thread -> audio thread requests; deque appends are thread-safe.
         self._inbox: deque[tuple[str, str]] = deque()
@@ -156,7 +160,8 @@ class TurnEngine:
 
     def set_speaking(self, speaking: bool) -> None:
         """Thread-safe: Snow's voice is audible (True) or has stopped (False). While it
-        is, the user speaking for `barge_in_min_ms` interrupts it (VOIC-06)."""
+        is, the user speaking for `barge_in_min_ms` (`barge_in_warmup_min_ms` while
+        the echo canceller is still adapting) interrupts it (VOIC-06)."""
         self._inbox.append(("speaking", "1" if speaking else ""))
 
     def mute(self) -> None:
@@ -270,8 +275,14 @@ class TurnEngine:
             self._barge_run = 0
             return
         self._barge_run += CHUNK
-        if self._barge_run >= self._samples(self._cfg.barge_in_min_ms / 1000):
+        if self._barge_run >= self._barge_min():
             self._barge_in()
+
+    def _barge_min(self) -> int:
+        """Samples of speech over Snow's voice that count as a barge-in."""
+        cfg = self._cfg
+        ms = cfg.barge_in_warmup_min_ms if self.echo_warming() else cfg.barge_in_min_ms
+        return self._samples(ms / 1000)
 
     def _barge_in(self) -> None:
         """Stop waiting and open the next turn on the audio that barged in."""
@@ -306,9 +317,8 @@ class TurnEngine:
             t.silence = 0
             t.speech_run += CHUNK
             t.last_speech_end = t.samples
-            if self._speaking_out and t.speech_run >= self._samples(
-                cfg.barge_in_min_ms / 1000
-            ):  # a short voice (a wake acknowledgement) is cut off by the next words
+            # a short voice (a wake acknowledgement) is cut off by the next words
+            if self._speaking_out and t.speech_run >= self._barge_min():
                 self._speaking_out = False
                 self.events.on_barge_in()
             if not t.speaking and t.speech_run >= self._samples(cfg.start_secs):

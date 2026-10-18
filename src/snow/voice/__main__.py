@@ -49,6 +49,7 @@ async def _main() -> None:
         local=local,
         tts=engines,  # the router loads only the engines tts.toml enables
         tts_cfg=tts_cfg,
+        echo_cancel=tts_cfg.playout.echo_cancellation,
     )
     mic.on_health = pipeline.mic_health
     client.on_event = pipeline.on_hub_event
