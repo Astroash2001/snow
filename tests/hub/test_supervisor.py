@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -13,8 +14,10 @@ from typing import Any
 import psutil
 import pytest
 
+from snow.config.settings import load_config
 from snow.contracts.events import Event, HealthSubsystem, WorkerExited, WorkerStarted
-from snow.hub.supervisor import Supervisor, WorkerSpec, scrub_env
+from snow.hub.__main__ import SnowConfig
+from snow.hub.supervisor import TICK_S, Supervisor, WorkerSpec, scrub_env
 from tests.conftest import HubHandle
 
 
@@ -100,6 +103,11 @@ class Rig:
         self.clock.t += seconds
         self.sup.tick()
 
+    def idle(self, seconds: float) -> None:
+        """Time passes one supervisor tick at a time with no heartbeats."""
+        for _ in range(round(seconds / TICK_S)):
+            self.advance(TICK_S)
+
     def run_for(self, seconds: float) -> None:
         """Time passes while the worker stays alive and keeps beating."""
         self.clock.t += seconds
@@ -164,17 +172,84 @@ async def test_stable_minute_resets_the_delay(rig: Rig) -> None:
     rig.expect_restart_after(0.5)
 
 
-async def test_no_heartbeat_for_six_seconds_is_a_hang(rig: Rig) -> None:
-    rig.advance(5.9)
-    assert rig.proc.code is None
+TIMING = load_config("snow.toml", SnowConfig).supervisor
+
+
+async def test_no_heartbeat_for_hang_after_is_a_hang(rig: Rig) -> None:
+    rig.idle(TIMING.hang_after_s - TICK_S)
+    assert rig.proc.code is None, "alive one tick before the limit"
     rig.beat()
-    rig.advance(5.9)
+    rig.idle(TIMING.hang_after_s - TICK_S)
     assert rig.proc.code is None, "a fresh heartbeat resets the timer"
-    rig.advance(0.2)
+    rig.idle(TICK_S * 2)
     assert rig.proc.code == -9
     rig.advance(0)
     assert rig.hub.of(WorkerExited)[-1].cause == "hang"
     rig.expect_restart_after(0.5)
+
+
+async def test_slow_warning_comes_once_and_rearms_on_a_beat(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger="snow.hub.supervisor")
+    rig.idle(TIMING.slow_after_s - TICK_S)
+    assert "worker_slow" not in caplog.text
+    rig.idle(TICK_S * 2)
+    rig.idle(TICK_S * 4)
+    assert caplog.text.count("worker_slow") == 1
+    assert rig.proc.code is None
+    rig.beat()
+    rig.idle(TICK_S)
+    rig.idle(TIMING.slow_after_s + TICK_S)
+    assert caplog.text.count("worker_slow") == 2
+
+
+async def test_a_tick_gap_of_exactly_sleep_gap_is_not_a_resume(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger="snow.hub.supervisor")
+    rig.beat()
+    rig.advance(TIMING.sleep_gap_s)
+    assert "hub_resumed" not in caplog.text
+
+
+async def test_a_resume_resets_heartbeats_and_kills_no_one(
+    rig: Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger="snow.hub.supervisor")
+    rig.beat()
+    rig.advance(TIMING.sleep_gap_s + 0.01)
+    assert "hub_resumed" in caplog.text
+    rig.beat()
+    rig.advance(3600)  # laptop slept for an hour
+    assert rig.proc.code is None
+    assert rig.hub.heartbeats["brain"] == rig.clock.t
+    # a worker that stays silent after the resume is still killed
+    rig.idle(TIMING.hang_after_s - TICK_S)
+    assert rig.proc.code is None
+    rig.idle(TICK_S * 2)
+    assert rig.proc.code == -9
+
+
+async def test_supervised_workers_get_the_stall_dump_env_and_extras_do_not() -> None:
+    envs: dict[str, Mapping[str, str]] = {}
+
+    def launch(name: str, argv: list[str], env: Mapping[str, str]) -> Any:
+        envs[name] = env
+        return FakeProc()
+
+    sup = Supervisor(
+        {"brain": WorkerSpec(command=["x"]), "tool": WorkerSpec(command=["x"])},
+        FakeHub(),
+        None,
+        env={"A": "1"},
+        launch=launch,
+        timing=TIMING,
+    )
+    sup.start()
+    await sup.stop_all()
+    assert envs["brain"] == {"A": "1", "SNOW_STALL_DUMP_S": f"{TIMING.slow_after_s:g}"}
+    assert envs["tool"] == {"A": "1"}
 
 
 async def test_stale_heartbeat_of_the_old_process_does_not_count(rig: Rig) -> None:

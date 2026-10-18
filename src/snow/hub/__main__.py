@@ -17,11 +17,12 @@ import time
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from snow.common.priority import raise_priority
 from snow.config.settings import data_dir, load_config, run_dir
 from snow.hub.eventlog import EventLog
 from snow.hub.jobobject import JobHandle
 from snow.hub.server import Hub
-from snow.hub.supervisor import Supervisor, WorkerSpec, scrub_env
+from snow.hub.supervisor import Supervisor, SupervisorConfig, WorkerSpec, scrub_env
 from snow.logging import configure
 
 __all__ = ["main", "scrub_env"]
@@ -44,6 +45,7 @@ class HubSettings(_Strict):
 
 class SnowConfig(_Strict):
     hub: HubSettings = HubSettings()
+    supervisor: SupervisorConfig = SupervisorConfig()
     workers: dict[str, WorkerSpec] = Field(default_factory=dict[str, WorkerSpec])
 
 
@@ -97,7 +99,7 @@ async def _run(autostart: bool) -> None:
         from snow.hub.jobobject import create_kill_on_close_job  # noqa: PLC0415
 
         job = create_kill_on_close_job()
-    supervisor = Supervisor(workers, hub, job, env=env)
+    supervisor = Supervisor(workers, hub, job, env=env, timing=config.supervisor)
     hub.on_kill = supervisor.kill
     retention = asyncio.create_task(_retention(event_log, config.hub.retention_days))
     supervisor.start()
@@ -120,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     if mutex is None:
         print("Snow is already running")
         return 0
+    raise_priority()
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(_run("--autostart" in args))
     return 0

@@ -4,6 +4,11 @@ Policy (Pattern 5): a dead or hung worker is restarted with a delay of 0.5 s dou
 30 s (plus or minus 20 % jitter, reset after 60 s stable). Five exits within two minutes
 trip a breaker: the worker shows Down and is retried once a minute instead of spinning.
 Health is published as `health.subsystem` events so the HUD shows every transition.
+
+A worker that stops beating is warned about after `slow_after_s` (it then writes its
+own Python stacks to its .err file) and killed after `hang_after_s`. A supervisor tick
+gap above `sleep_gap_s` means the PC slept: heartbeats are reset instead of judged.
+The values come from snow.toml [supervisor].
 """
 
 import asyncio
@@ -36,7 +41,6 @@ BACKOFF_START_S = 0.5
 BACKOFF_MAX_S = 30.0
 JITTER = 0.2
 STABLE_S = 60.0
-HEARTBEAT_TIMEOUT_S = 6.0
 BREAKER_EXITS = 5
 BREAKER_WINDOW_S = 120.0
 BREAKER_RETRY_S = 60.0
@@ -58,6 +62,14 @@ Status = Literal["running", "starting", "restarting", "down"]
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class SupervisorConfig(_Strict):
+    """Defaults mirror snow.toml [supervisor]; some tests omit that section."""
+
+    slow_after_s: float = 6.0
+    hang_after_s: float = 20.0
+    sleep_gap_s: float = 3.0
 
 
 class WorkerSpec(_Strict):
@@ -136,6 +148,7 @@ class _State:
     exits: deque[float] = field(default_factory=deque[float])
     status: Status | None = None
     detail: str | None = None
+    slow: bool = False
 
 
 class Supervisor:
@@ -150,7 +163,7 @@ class Supervisor:
         env: Mapping[str, str],
         launch: Launcher = _launch,
         jitter: Callable[[], float] = _jitter,
-        heartbeat_timeout_s: float = HEARTBEAT_TIMEOUT_S,
+        timing: SupervisorConfig | None = None,
     ) -> None:
         self._hub = hub
         self._job = job
@@ -159,7 +172,8 @@ class Supervisor:
         self._env = env
         self._launch = launch
         self._jitter = jitter
-        self._hb_timeout = heartbeat_timeout_s
+        self._timing = timing or SupervisorConfig()
+        self._last_tick: float | None = None
         self._stopping = False
         self._task: asyncio.Task[None] | None = None
         self._states = {
@@ -240,6 +254,17 @@ class Supervisor:
     def tick(self) -> None:
         if self._stopping:
             return
+        now = self._clock()
+        if (
+            self._last_tick is not None
+            and now - self._last_tick > self._timing.sleep_gap_s
+        ):
+            # The monotonic clock keeps counting through sleep, so after a resume
+            # every heartbeat looks stale: forgive them once, kill no healthy worker.
+            log.warning("hub_resumed gap_s=%.1f", now - self._last_tick)
+            for name in self._hub.heartbeats:
+                self._hub.heartbeats[name] = now
+        self._last_tick = now
         for state in self._states.values():
             self._watch(state)
 
@@ -260,10 +285,19 @@ class Supervisor:
             return
         if w.status != "running":
             self._health(w, "running")
-        if w.name in _WATCHED and now - beat > self._hb_timeout and w.cause is None:
-            log.warning("worker_hung worker=%s", w.name)
+        if w.name not in _WATCHED or w.cause is not None:
+            return
+        silent = now - beat
+        if silent > self._timing.hang_after_s:
+            log.warning("worker_hung worker=%s silent_s=%.1f", w.name, silent)
             w.cause = "hang"
             w.proc.kill()
+        elif silent > self._timing.slow_after_s:
+            if not w.slow:
+                w.slow = True
+                log.warning("worker_slow worker=%s silent_s=%.1f", w.name, silent)
+        else:
+            w.slow = False
 
     # --- transitions ---------------------------------------------------------
 
@@ -272,9 +306,11 @@ class Supervisor:
         if w.name == "hud" and w.spawns:
             argv.append("--restarted")  # reopen without popping the dashboard
         self._hub.heartbeats.pop(w.name, None)  # only THIS process's beats count
-        proc = self._launch(w.name, argv, self._env)
+        env = {**self._env, "SNOW_STALL_DUMP_S": f"{self._timing.slow_after_s:g}"}
+        proc = self._launch(w.name, argv, env)
         w.started_at = self._clock()
         w.cause = None
+        w.slow = False
         restart_count = w.spawns
         w.spawns += 1
         if proc is None:

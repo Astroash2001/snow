@@ -6,6 +6,11 @@
 allowed_origins = ["http://localhost:5173"]
 retention_days = 30
 
+[supervisor]
+slow_after_s = 6.0   # workers beat every 2 s, so 6 s is three missed beats: logged, and the worker writes its Python stacks to logs/<worker>.err
+hang_after_s = 20.0  # silent this long: killed and restarted
+sleep_gap_s = 3.0    # a supervisor tick gap this long means the laptop slept, so heartbeats are reset, not judged
+
 [workers.brain]
 command = ["{python}", "-m", "snow.brain"]
 enabled = true

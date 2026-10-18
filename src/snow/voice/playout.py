@@ -4,6 +4,13 @@ Audio only ever lives in memory (D-18). The device callback runs on PortAudio's 
 so the callbacks (`on_render`, `on_first_audio`, `on_level`, `on_drained`) run there
 and must only hop onto the event loop. `on_render` gets every block played, silent ones
 too: it is the echo canceller's reference (VOIC-06) and must be fast and never raise.
+
+If synthesis falls behind playback (an underrun), the speaker fades out over a few
+milliseconds, waits until `rebuffer_ms` is queued or the clause is complete, and fades
+back in, instead of playing silence gaps for the rest of the reply. The synthesis
+real-time factor (RTF, EWMA over clauses) is tracked from `clause_done`; above
+`hold_rtf` each clause starts only once it is fully synthesized. Fades are applied to
+the block before `on_render`, so the echo reference equals what is played.
 """
 
 import collections
@@ -24,6 +31,10 @@ log = logging.getLogger("snow.voice")
 _BLOCK_S = 0.02
 _LEVEL_EVERY_S = 0.031
 _FLOOR_DB = -60.0
+# 5 ms removes the click of cutting a waveform mid-cycle, without softening speech.
+_FADE_S = 0.005
+# Weight of the newest clause: the EWMA follows a load change within two clauses.
+_RTF_ALPHA = 0.5
 
 
 class OutputStream(Protocol):
@@ -86,6 +97,21 @@ class Playout:
     ) -> None:
         self.sample_rate = sample_rate
         self._prebuffer = sample_rate * cfg.prebuffer_ms // 1000
+        self._rebuffer = sample_rate * cfg.rebuffer_ms // 1000
+        self._hold_rtf = cfg.hold_rtf
+        self._fade = max(1, int(sample_rate * _FADE_S))
+        self._fade_down = np.linspace(
+            1.0, 0.0, self._fade, endpoint=False, dtype=np.float32
+        )
+        self._fade_up = self._fade_down[::-1].copy()
+        # Machine load outlives an utterance, so the RTF does too.
+        # shortcut: one EWMA across engines, per-engine RTF only if Cartesia and
+        # Pocket ever need separate holds (gap study row 9).
+        self.rtf = 0.0
+        self._rtf_seen = False
+        self.underruns = (
+            0  # reset by start_utterance only, so the pipeline can read it after
+        )
         self._block = int(sample_rate * _BLOCK_S)
         self.on_first_audio = on_first_audio
         self.on_level = on_level
@@ -106,6 +132,14 @@ class Playout:
         self._chunks.clear()
         self._buffered = 0
         self._played = 0
+        self._threshold = self._prebuffer  # queued samples that start (or resume) play
+        self._fade_in = False
+        self._clause = 0  # samples pushed since the last clause boundary
+
+    @property
+    def holding(self) -> bool:
+        """Synthesis is too slow to stream: each clause plays only once complete."""
+        return self.rtf > self._hold_rtf
 
     @property
     def played(self) -> int:
@@ -117,6 +151,7 @@ class Playout:
     def start_utterance(self) -> None:
         with self._lock:
             self._reset_utterance()
+            self.underruns = 0
             if self._stream is None:
                 self._stream = self._factory(
                     self.sample_rate, self._block, self._callback
@@ -127,7 +162,23 @@ class Playout:
         with self._lock:
             self._chunks.append(chunk)
             self._buffered += len(chunk)
-            if self._buffered >= self._prebuffer:
+            self._clause += len(chunk)
+            if not self.holding and self._buffered >= self._threshold:
+                self._playing = True
+
+    def clause_done(self, synth_s: float) -> None:
+        """A clause finished synthesizing in `synth_s` seconds: update the RTF.
+
+        A complete clause cannot underrun inside itself, so whatever is buffered plays.
+        """
+        with self._lock:
+            if self._clause > 0:
+                rtf = synth_s / (self._clause / self.sample_rate)
+                if self._rtf_seen:
+                    rtf = _RTF_ALPHA * rtf + (1 - _RTF_ALPHA) * self.rtf
+                self.rtf, self._rtf_seen = rtf, True
+                self._clause = 0
+            if self._buffered > 0:
                 self._playing = True
 
     def end_utterance(self) -> None:
@@ -178,9 +229,25 @@ class Playout:
                 self._played += filled
                 if filled and not self._started:
                     self._started = first = True
+                if self._fade_in and filled:
+                    n = min(filled, self._fade)
+                    out[:n] *= self._fade_up[:n]
+                    self._fade_in = False
                 if filled < frames and self._ended:
                     drained = True
                     self._reset_utterance()
+                elif filled < frames:  # underrun: fade out, re-buffer, fade back in
+                    n = min(filled, self._fade)
+                    ramp = (
+                        self._fade_down
+                        if n == self._fade
+                        else np.linspace(1.0, 0.0, n, endpoint=False, dtype=np.float32)
+                    )
+                    out[filled - n : filled] *= ramp
+                    self._playing = False
+                    self._threshold = self._rebuffer
+                    self._fade_in = True
+                    self.underruns += 1
             speaking = filled > 0
         self.on_render(out)  # speech or zeros: the reference has no gaps
         if first:

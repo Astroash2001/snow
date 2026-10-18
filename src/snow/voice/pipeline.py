@@ -42,7 +42,7 @@ from snow.voice.playout import Playout, StreamFactory
 from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
 from snow.voice.stt_router import SttRouter
-from snow.voice.tone import ToneAnalyzer
+from snow.voice.tone import ToneAnalyzer, voiced_level
 from snow.voice.tts.base import EngineName, Samples, TtsEngine
 from snow.voice.tts.config import TtsConfig
 from snow.voice.tts.router import VoiceRouter
@@ -312,6 +312,10 @@ class VoicePipeline:
         await asyncio.sleep(0)  # let call_soon_threadsafe hops from the last frames run
         while self._tasks:  # noqa: ASYNC110 - polls a set of tasks
             await asyncio.sleep(0.01)
+        self._engine.drain()  # a command answered by the last transcript counts too
+        await asyncio.sleep(
+            0
+        )  # its events hop onto the loop before the queue is joined
         await self._q.join()
 
     async def stop(self) -> None:
@@ -584,7 +588,11 @@ class VoicePipeline:
                 while (text := await reply.queue.get()) is not None:
                     reply.chars += len(text)
                     reply.chunks.append((text, reply.pushed))
+                    started = time.monotonic()
                     yield text
+                    # The router resumes us once it has synthesized the clause; waiting
+                    # on the LLM for the next text is outside this window.
+                    playout.clause_done(time.monotonic() - started)
 
             def push(audio: Samples) -> None:
                 reply.tts_first_audio_ns = reply.tts_first_audio_ns or time.time_ns()
@@ -657,6 +665,14 @@ class VoicePipeline:
 
     def _publish_timing(self, reply: _Reply) -> None:
         """One `turn.timing` per answered turn (an acknowledgement has no VAD stop)."""
+        if self._playout is not None and reply.spoke:  # numbers only (D-18)
+            log.info(
+                "tts_playout turn_id=%s underruns=%d rtf=%.2f hold=%s",
+                reply.turn_id,
+                self._playout.underruns,
+                self._playout.rtf,
+                self._playout.holding,
+            )
         if reply.vad_stop_ns is None:
             return
         self._emit(
@@ -697,6 +713,14 @@ class VoicePipeline:
         duration_ms: int,
         local: "Future[str] | None" = None,
     ) -> None:
+        voiced_s, dbfs = voiced_level(pcm, self._cfg.audio.sample_rate)
+        log.info(
+            "turn_audio turn_id=%s voiced_s=%.2f dbfs=%.1f", turn_id, voiced_s, dbfs
+        )
+        if voiced_s < self._cfg.stt.min_voiced_s:  # a cough or click: no Groq request
+            log.info("turn_dropped turn_id=%s reason=too_short", turn_id)
+            self._release(turn_id)
+            return
         try:
             raw, source = await self._router.final(
                 pcm, self._cfg.audio.sample_rate, local
@@ -714,6 +738,14 @@ class VoicePipeline:
         if self._muted:  # muted while the audio was up there: the turn is void
             return
         text = strip_wake(raw, self._cfg.wake.strip_patterns)
+        # Word counts only: shows whether the strip regex or Whisper drops words (D-18).
+        log.info(
+            "turn_heard turn_id=%s source=%s raw_words=%d words=%d",
+            turn_id,
+            source,
+            len(raw.split()),
+            len(text.split()),
+        )
         command = match_command(text, self._cfg.phrases) if text else None
         if command in ("end", "sleep"):  # handled here, so the brain never answers it
             self._engine.end_conversation("phrase" if command == "end" else "sleep")

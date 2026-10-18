@@ -3,6 +3,7 @@
 import asyncio
 
 from snow.common.hubclient import HubClient
+from snow.common.priority import raise_priority
 from snow.config.secrets import get_secret
 from snow.config.settings import load_config, repo_root
 from snow.logging import configure
@@ -66,4 +67,5 @@ async def _main() -> None:
 
 if __name__ == "__main__":
     configure("voice")
+    raise_priority()
     asyncio.run(_main())

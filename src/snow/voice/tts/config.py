@@ -18,6 +18,8 @@ class RouterConfig(_Strict):
 
 class PlayoutConfig(_Strict):
     prebuffer_ms: int
+    rebuffer_ms: int  # after an underrun, playback resumes once this much is queued
+    hold_rtf: float  # above this synthesis real-time factor a clause plays only whole
     # Headphones need no echo canceller; on speakers barge-in relies on it.
     assume_headphones: bool
     echo_cancellation: bool  # the live worker runs the WebRTC canceller (VOIC-06)
