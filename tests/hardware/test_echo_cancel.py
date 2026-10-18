@@ -113,7 +113,8 @@ def test_snow_alone_on_speakers_is_not_heard_by_itself(rig: Rig) -> None:
     for i in range(start, end - per_s, per_s):
         raw, clean = pcm(rig.raw, i, i + per_s), pcm(rig.clean, i, i + per_s)
         print(
-            f"  t={i - start:3d}s raw {db(raw):6.1f} dBFS  clean {db(clean):6.1f} dBFS"
+            f"  t={(i - start) * FRAME_S:5.1f}s raw {db(raw):6.1f} dBFS  "
+            f"clean {db(clean):6.1f} dBFS"
         )
 
     cold = longest_run_ms(pcm(rig.clean, start), 0.0, WARM_S)
@@ -136,8 +137,14 @@ def test_talking_over_snow_on_speakers_still_gets_through(rig: Rig) -> None:
     start = len(rig.raw)
     print("\n>>> SAY A SENTENCE OVER SNOW NOW (about 4 seconds) <<<")
     time.sleep(6.0)
-    run = longest_run_ms(pcm(rig.clean, start))
-    print(f"longest VAD run on the cleaned mic while you talked: {run} ms")
+    raw, clean = pcm(rig.raw, start), pcm(rig.clean, start)
+    run = longest_run_ms(clean)
+    # Raw vs clean tells a quiet mic (raw low too) from a canceller eating the voice.
+    print(
+        f"while you talked: raw {db(raw):.1f} dBFS, longest VAD run "
+        f"{longest_run_ms(raw)} ms; clean {db(clean):.1f} dBFS, "
+        f"longest VAD run {run} ms"
+    )
     assert run >= CFG.turn.barge_in_min_ms, (
         "your voice did not get through the canceller"
     )
