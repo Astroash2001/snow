@@ -131,10 +131,28 @@ class PolishConfig(_Strict):
     trim_edges: bool  # trim each clause's silence and fade its edges
     compressor: bool  # gentle compression before the makeup gain
     makeup_db: float = Field(ge=0.0, le=12.0)  # louder; 0 = off
+    # 1.0 = off; 0.89 is about -2 semitones, the limit before formants turn cartoonish.
+    pace: float = Field(ge=0.85, le=1.0)
+    sentence_pause_ms: int = Field(ge=0, le=600)  # after . ? !; 0 = off
+    comma_pause_ms: int = Field(ge=0, le=300)  # after , ; : and a dash; 0 = off
+    eq: bool  # warmth, presence and a 10 kHz roll-off
+    warmth_db: float = Field(ge=-6.0, le=6.0)
+    presence_db: float = Field(ge=-6.0, le=6.0)
+    reverb_wet: float = Field(ge=0.0, le=0.2)  # a short plate-style reverb; 0 = off
 
     @property
     def all_off(self) -> bool:
-        return not (self.trim_edges or self.compressor or self.makeup_db > 0)
+        """Nothing here changes the sound: only the device-rate resample remains."""
+        return not (
+            self.trim_edges
+            or self.compressor
+            or self.makeup_db > 0
+            or self.pace < 1.0
+            or self.sentence_pause_ms
+            or self.comma_pause_ms
+            or self.eq
+            or self.reverb_wet > 0
+        )
 
 
 class TtsConfig(_Strict):

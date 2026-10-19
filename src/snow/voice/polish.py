@@ -14,7 +14,10 @@ Streaming: each engine chunk is processed as it arrives; filter, resampler, comp
 and reverb state carries across chunks, so the result does not depend on chunk sizes.
 """
 
+from functools import lru_cache
+
 import numpy as np
+import numpy.typing as npt
 import soxr
 
 from snow.voice.tts.base import Samples
@@ -35,11 +38,85 @@ _ATTACK_S, _RELEASE_S = 0.005, 0.120
 # Limiter ceiling -1 dBFS; the gain comes back toward 1 over about 80 ms.
 _CEILING = 10 ** (-1 / 20)
 _LIMITER_RELEASE_S = 0.080
+# Punctuation that ends a clause: the pause that follows it.
+_SENTENCE_END, _COMMA_END = ".?!\u2026", ",;:-\u2013\u2014"
+_CLOSERS = " \t\r\n\"')]}\u201d\u2019"
+# EQ: a linear-phase FIR designed by frequency sampling (warmth shelf, presence bell,
+# 4th-order Butterworth low-pass at 10 kHz).
+_EQ_TAPS, _EQ_GRID = 1025, 16384
+_WARMTH_HZ, _PRESENCE_HZ, _PRESENCE_OCT, _LOWPASS_HZ = 180.0, 2800.0, 0.6, 10000.0
+# Reverb: 12 ms pre-delay, 300 ms of noise decaying 60 dB, darkened, unit energy.
+_PREDELAY_S, _REVERB_S, _REVERB_SEED = 0.012, 0.300, 1
+# A convolution tail quieter than -66 dBFS is inaudible: flush stops there.
+_TAIL_FLOOR = 10 ** (-66 / 20)
 _EMPTY: Samples = np.zeros(0, dtype=np.float32)
 
 
 def _db(power: float) -> float:
     return 10.0 * float(np.log10(max(power, 1e-12)))
+
+
+@lru_cache(maxsize=8)
+def _impulse(
+    rate: int, eq: bool, warmth_db: float, presence_db: float, wet: float
+) -> npt.NDArray[np.float64]:
+    """EQ and reverb as one impulse response (the unit impulse when both are off)."""
+    fir = np.zeros(_EQ_TAPS)
+    fir[_EQ_TAPS // 2] = 1.0
+    if eq:
+        f = np.maximum(np.arange(_EQ_GRID // 2 + 1) * rate / _EQ_GRID, 1e-3)
+        bell = np.exp(-0.5 * (np.log2(f / _PRESENCE_HZ) / _PRESENCE_OCT) ** 2)
+        gain_db = warmth_db / (1 + (f / _WARMTH_HZ) ** 2) + presence_db * bell
+        mag = 10 ** (gain_db / 20) / np.sqrt(1 + (f / _LOWPASS_HZ) ** 8)
+        zero_phase = np.fft.irfft(mag, _EQ_GRID)
+        half = _EQ_TAPS // 2
+        fir = np.concatenate([zero_phase[-half:], zero_phase[: half + 1]])
+        fir *= np.hanning(_EQ_TAPS)
+    if wet <= 0:
+        return fir
+    t = np.arange(int(_REVERB_S * rate)) / rate
+    noise = np.random.default_rng(_REVERB_SEED).standard_normal(len(t))
+    tail = noise * np.exp(-t * np.log(1000) / _REVERB_S)
+    tail = np.convolve(tail, np.ones(4) / 4, mode="same")
+    tail *= wet / np.sqrt(np.sum(tail**2))
+    wet_ir = np.concatenate([np.zeros(int(_PREDELAY_S * rate)), tail])
+    wet_ir[0] += 1.0  # the dry path
+    size = 1 << (len(fir) + len(wet_ir)).bit_length()
+    both = np.fft.irfft(np.fft.rfft(fir, size) * np.fft.rfft(wet_ir, size), size)
+    return both[: len(fir) + len(wet_ir) - 1]
+
+
+class _Convolver:
+    """FFT overlap-add convolution of a stream, for any block size."""
+
+    def __init__(self, ir: npt.NDArray[np.float64], delay: int) -> None:
+        self._ir = ir
+        self._tail = np.zeros(len(ir) - 1)
+        self._skip = delay  # a linear-phase FIR's delay is removed from the start
+        self._spectra: dict[int, npt.NDArray[np.complex128]] = {}
+
+    def run(self, x: Samples) -> Samples:
+        n, m = len(x), len(self._ir)
+        if n == 0:
+            return x
+        size = 1 << (n + m - 2).bit_length()
+        if size not in self._spectra:
+            self._spectra[size] = np.fft.rfft(self._ir, size)
+        y = np.fft.irfft(np.fft.rfft(x, size) * self._spectra[size], size)[: n + m - 1]
+        y[: m - 1] += self._tail
+        self._tail = y[n:]
+        return self._drop_delay(y[:n])
+
+    def flush(self) -> Samples:
+        """The ring-out after the last input, up to where it falls below audibility."""
+        tail, self._tail = self._tail, np.zeros(0)
+        loud = np.flatnonzero(np.abs(tail) > _TAIL_FLOOR)
+        return self._drop_delay(tail[: int(loud[-1]) + 1] if len(loud) else tail[:0])
+
+    def _drop_delay(self, y: npt.NDArray[np.float64]) -> Samples:
+        skip = min(self._skip, len(y))
+        self._skip -= skip
+        return y[skip:].astype(np.float32)
 
 
 class Polish:
@@ -48,15 +125,33 @@ class Polish:
         self._in_rate, self._out_rate = in_rate, out_rate
         # The device-rate resample is always on; with equal rates and every part off the
         # whole chain is a pass-through.
+        # Pace is the resampler's rate: played at out_rate the speech is longer and
+        # lower together. shortcut: a pure time-stretch needs a phase vocoder; revisit
+        # if the pitch drop is unwanted.
         self._resampler = (
             soxr.ResampleStream(
-                float(in_rate), float(out_rate), 1, dtype="float32", quality="VHQ"
+                float(in_rate),
+                out_rate / cfg.pace,
+                1,
+                dtype="float32",
+                quality="VHQ",
             )
-            if in_rate != out_rate
+            if in_rate != out_rate or cfg.pace < 1.0
             else None
         )
         self._dynamics = not cfg.all_off
         self._passthrough = self._resampler is None and cfg.all_off
+        # EQ and reverb at out_rate as one convolution; skipped when both are off.
+        self._conv = (
+            _Convolver(
+                _impulse(
+                    out_rate, cfg.eq, cfg.warmth_db, cfg.presence_db, cfg.reverb_wet
+                ),
+                _EQ_TAPS // 2 if cfg.eq else 0,
+            )
+            if cfg.eq or cfg.reverb_wet > 0
+            else None
+        )
         # edges (at in_rate)
         self._lead = int(in_rate * _LEAD_S)
         self._trail = int(in_rate * _TRAIL_S)
@@ -91,21 +186,30 @@ class Polish:
 
     def end_clause(self, text: str) -> Samples:
         """The clause `text` started is fully synthesized: release its held tail."""
-        del text  # Task 2: the punctuation picks the pause that follows
         if self._passthrough:
             return _EMPTY
-        return self._after_edges(self._end_edges() if self._cfg.trim_edges else _EMPTY)
+        tail = self._end_edges() if self._cfg.trim_edges else _EMPTY
+        # The pause is silence at the voice rate, scaled so it plays as configured.
+        ms = self._pause_ms(text)
+        pause = np.zeros(int(self._in_rate * ms / 1000 * self._cfg.pace), np.float32)
+        return self._after_edges(np.concatenate([tail, pause]))
 
     def flush(self) -> Samples:
         """The reply is over: everything still held, then nothing more."""
         if self._passthrough:
             return _EMPTY
-        tail = self._end_edges() if self._cfg.trim_edges else _EMPTY
-        out = [self._after_edges(tail)]
+        x = self._end_edges() if self._cfg.trim_edges else _EMPTY
         if self._resampler is not None:
-            out.append(self._through_dynamics(self._resample(_EMPTY, last=True)))
-        out.append(self._dynamics_flush())
-        return np.concatenate(out)
+            x = self._resample(x, last=True)
+        if self._conv is not None:
+            x = np.concatenate([self._conv.run(x), self._conv.flush()])
+        return np.concatenate([self._through_dynamics(x), self._dynamics_flush()])
+
+    def _pause_ms(self, text: str) -> int:
+        end = text.rstrip(_CLOSERS)[-1:]
+        if end and end in _SENTENCE_END:
+            return self._cfg.sentence_pause_ms
+        return self._cfg.comma_pause_ms if end and end in _COMMA_END else 0
 
     # --- edges ----------------------------------------------------------------------
 
@@ -155,6 +259,8 @@ class Polish:
     def _after_edges(self, x: Samples) -> Samples:
         if self._resampler is not None:
             x = self._resample(x)
+        if self._conv is not None:
+            x = self._conv.run(x)
         return self._through_dynamics(x)
 
     def _resample(self, x: Samples, last: bool = False) -> Samples:

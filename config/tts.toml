@@ -46,7 +46,14 @@ echo_cancellation = true
 # and is not listed here. Every part below can be switched off for an A/B listen.
 trim_edges = true   # trim each clause's leading/trailing silence, 5 ms fades; false = off
 compressor = true   # gentle 2.5:1 compression above -26 dBFS; false = off
-makeup_db = 8.0     # louder by this much before the limiter (-1 dBFS ceiling); 0 = off
+makeup_db = 7.5     # louder by this much before the limiter (-1 dBFS ceiling); 0 = off
+pace = 0.93         # slower and lower together (about -1.3 semitones); 1.0 = off
+sentence_pause_ms = 180  # silence after . ? ! between clauses; 0 = off
+comma_pause_ms = 70      # silence after , ; : and a dash; 0 = off
+eq = true           # warmth + presence + 10 kHz roll-off; false = off
+warmth_db = 3.0     # low-shelf boost around 180 Hz (-6..6); 0 = flat
+presence_db = 2.0   # bell boost around 2.8 kHz (-6..6); 0 = flat
+reverb_wet = 0.06   # short, quiet plate-style reverb (0..0.2); 0 = off
 
 [engines.pocket_tts]
 enabled = true

@@ -135,7 +135,72 @@ def test_the_polish_runs_far_faster_than_real_time() -> None:
     assert time.perf_counter() - started < 1.0
 
 
-@pytest.mark.parametrize("field", ["makeup_db"])
-def test_polish_config_bounds(field: str) -> None:
-    with pytest.raises(ValueError, match=field):
-        PolishConfig(trim_edges=True, compressor=True, makeup_db=40.0)
+def test_pace_slows_and_lowers_together() -> None:
+    x = sine(200, 1.0)
+    y = run(off(pace=0.93), x, out_rate=VOICE)
+    assert abs(len(y) - len(x) / 0.93) < 0.01 * len(x) / 0.93
+    mid = y[len(y) // 4 : 3 * len(y) // 4]
+    assert abs(peak_freq(mid, VOICE) - 200 * 0.93) < 2.0
+
+
+@pytest.mark.parametrize(
+    ("text", "ms"),
+    [
+        ("Right.", 180),
+        ("Right?", 180),
+        ("Right!", 180),
+        ('Right." ', 180),
+        ("Right,", 70),
+        ("Right;", 70),
+        ("Right:", 70),
+        ("Right " + chr(0x2014), 70),
+        ("Right", 0),
+    ],
+)
+def test_punctuation_picks_the_pause(text: str, ms: int) -> None:
+    cfg = off(trim_edges=True, sentence_pause_ms=180, comma_pause_ms=70)
+    polish = Polish(cfg, VOICE, VOICE)
+    clause = np.concatenate([sine(220, 0.3), np.zeros(VOICE // 2, np.float32)])
+    y = np.concatenate(
+        [polish.process(clause), polish.end_clause(text), polish.flush()]
+    )
+    quiet_after = len(y) - 1 - int(np.flatnonzero(np.abs(y) > 10 ** (-50 / 20))[-1])
+    pause = quiet_after - int(VOICE * 0.030)  # the tail margin comes first
+    assert abs(pause - int(VOICE * ms / 1000)) <= VOICE // 1000  # within 1 ms
+
+
+def run_same_rate(cfg: PolishConfig, x: Samples, rate: int) -> Samples:
+    polish = Polish(cfg, rate, rate)
+    return np.concatenate(
+        [polish.process(x[i : i + 4800]) for i in range(0, len(x), 4800)]
+        + [polish.end_clause("x"), polish.flush()]
+    )
+
+
+def test_eq_adds_warmth_and_presence_and_rolls_off_the_top() -> None:
+    cfg = off(eq=True, warmth_db=3.0, presence_db=2.0)
+
+    def level(freq: float) -> float:
+        y = run_same_rate(cfg, sine(freq, 1.0, 0.0316, DEVICE), DEVICE)
+        return db(float(np.sqrt(np.mean(y[len(y) // 4 : 3 * len(y) // 4] ** 2))))
+
+    ref = level(1000)
+    assert level(100) - ref >= 1.5
+    assert level(2800) - ref >= 1.0
+    assert level(14000) - ref <= -6.0
+
+
+def test_reverb_rings_out_after_the_last_sample_and_decays() -> None:
+    cfg = off(reverb_wet=0.06)
+    polish = Polish(cfg, DEVICE, DEVICE)
+    polish.process(sine(220, 0.2, 0.5, DEVICE))
+    tail = polish.flush()
+    assert db(float(np.max(np.abs(tail[: DEVICE // 100])))) > -60  # not silent at start
+    assert float(np.max(np.abs(tail[-DEVICE // 1000 :]))) < 10 ** (-60 / 20)
+    assert len(tail) <= int(DEVICE * (0.012 + 0.300 + 0.020))
+
+
+def test_polish_config_bounds() -> None:
+    for bad in ({"makeup_db": 40.0}, {"pace": 0.5}, {"reverb_wet": 0.9}):
+        with pytest.raises(ValueError, match=next(iter(bad))):
+            PolishConfig(**{**SHIPPED.model_dump(), **bad})

@@ -150,7 +150,18 @@ def no_device_rate(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def polish_off() -> PolishConfig:
     """Every polish part off (the device-rate resample is not one): exact maths."""
-    return PolishConfig(trim_edges=False, compressor=False, makeup_db=0.0)
+    return PolishConfig(
+        trim_edges=False,
+        compressor=False,
+        makeup_db=0.0,
+        pace=1.0,
+        sentence_pause_ms=0,
+        comma_pause_ms=0,
+        eq=False,
+        warmth_db=3.0,
+        presence_db=2.0,
+        reverb_wet=0.0,
+    )
 
 
 def tts_cfg_polish_off(cfg: TtsConfig) -> TtsConfig:
