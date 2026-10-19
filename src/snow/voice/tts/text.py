@@ -40,14 +40,16 @@ def sanitize(text: str) -> str:
 _ABBREVIATIONS = {"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "e.g", "i.e"}
 _BOUNDARY = re.compile(r"[.!?]+[\"')\]]*(?=\s)|[,;:](?=\s)|[—–]|(?<=\s)-{1,2}(?=\s)")
 _LIST_NUMBER = re.compile(r"(?:.*\n)?\s*\d+", re.S)
-_FIRST_CLAUSE_WORDS = 3
+# A 3-word opening fragment got its own prosody and made every reply start choppy.
+# Pocket streams frames, so a longer first chunk barely moves first audio.
+_FIRST_CLAUSE_WORDS = 8
 
 
 class SentenceChunker:
     """Cuts streamed reply text into speakable chunks. `feed` takes raw deltas.
 
     The first chunk ends at the first clause boundary (comma, semicolon, colon, dash)
-    once it holds 3 words, else at the first sentence end; later ones end at sentence
+    once it holds 8 words, else at the first sentence end; later ones end at sentence
     ends only. A boundary needs the whitespace after it, so decimals (3.5) and names
     never split; the last sentence waits for `flush`. Fenced code is dropped here, even
     when the fence spans several deltas.
