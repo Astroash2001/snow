@@ -40,6 +40,14 @@ hold_rtf = 0.7
 assume_headphones = false
 echo_cancellation = true
 
+[polish]
+# Voice polish, applied to every voice in the reply push path, before the playout, so the
+# echo reference matches what plays. The resample to the speaker's own rate is always on
+# and is not listed here. Every part below can be switched off for an A/B listen.
+trim_edges = true   # trim each clause's leading/trailing silence, 5 ms fades; false = off
+compressor = true   # gentle 2.5:1 compression above -26 dBFS; false = off
+makeup_db = 8.0     # louder by this much before the limiter (-1 dBFS ceiling); 0 = off
+
 [engines.pocket_tts]
 enabled = true
 # The base voice. `path` is a built-in preset name, a .safetensors voice state or an audio

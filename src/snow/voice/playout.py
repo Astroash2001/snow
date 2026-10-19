@@ -76,6 +76,19 @@ def _wasapi_output() -> int | None:
     return None if wasapi is None else int(wasapi["default_output_device"])  # pyright: ignore[reportUnknownArgumentType]
 
 
+def device_rate() -> int | None:
+    """The WASAPI default output's own sample rate, or None when it cannot be read."""
+    # shortcut: rate read once at voice load, WASAPI auto_convert covers a device
+    # switched later; re-read on device change if that ever matters
+    try:
+        index = _wasapi_output()
+        if index is None or index < 0:
+            return None
+        return int(sd.query_devices(index)["default_samplerate"])  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+    except Exception:  # noqa: BLE001 - no usable device: the voice keeps its own rate
+        return None
+
+
 def level_of(block: npt.NDArray[np.float32]) -> float:
     """RMS of a block mapped from -60..0 dBFS to 0..1 (the HUD's audio.level)."""
     rms = float(np.sqrt(np.mean(np.square(block, dtype=np.float64))))

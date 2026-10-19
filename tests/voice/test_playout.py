@@ -5,7 +5,8 @@ import logging
 import numpy as np
 import pytest
 
-from snow.voice.playout import Playout
+from snow.voice import playout as playout_mod
+from snow.voice.playout import Playout, device_rate
 from tests.voice.test_tts_pipeline import (
     RATE,
     TTS_CFG,
@@ -168,3 +169,29 @@ async def test_the_pipeline_reports_each_clause_and_logs_numbers_only(
     assert "underruns=" in line
     assert "rtf=" in line
     assert not any(t in caplog.text for t in engine.texts)
+
+
+def test_device_rate_is_the_wasapi_default_outputs_own_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sd = playout_mod.sd
+    wasapi = [
+        {"name": "MME", "default_output_device": 3},
+        {"name": "Windows WASAPI", "default_output_device": 11},
+    ]
+    monkeypatch.setattr(sd, "query_hostapis", lambda: wasapi)
+    monkeypatch.setattr(sd, "query_devices", lambda i: {"default_samplerate": 48000.0})
+    assert device_rate() == 48000
+    monkeypatch.setattr(sd, "query_hostapis", lambda: [wasapi[0]])
+    assert device_rate() is None  # no WASAPI
+    monkeypatch.setattr(
+        sd, "query_hostapis", lambda: [{"name": "WASAPI", "default_output_device": -1}]
+    )
+    assert device_rate() is None  # no default output
+
+    def broken(i: int) -> dict[str, float]:
+        raise OSError
+
+    monkeypatch.setattr(sd, "query_hostapis", lambda: wasapi)
+    monkeypatch.setattr(sd, "query_devices", broken)
+    assert device_rate() is None

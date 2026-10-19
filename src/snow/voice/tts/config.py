@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from snow.voice.tts.base import EngineName
 
@@ -125,9 +125,22 @@ class AuditionConfig(_Strict):
     pocket_voices: list[str]  # built-in Pocket TTS presets worth hearing
 
 
+class PolishConfig(_Strict):
+    """Voice polish (src/snow/voice/polish.py): every part has a switch-off value."""
+
+    trim_edges: bool  # trim each clause's silence and fade its edges
+    compressor: bool  # gentle compression before the makeup gain
+    makeup_db: float = Field(ge=0.0, le=12.0)  # louder; 0 = off
+
+    @property
+    def all_off(self) -> bool:
+        return not (self.trim_edges or self.compressor or self.makeup_db > 0)
+
+
 class TtsConfig(_Strict):
     audition_line: str  # spoken by the audition tool only
     audition: AuditionConfig
     router: RouterConfig
     playout: PlayoutConfig
+    polish: PolishConfig
     engines: EnginesConfig

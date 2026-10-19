@@ -38,7 +38,8 @@ from snow.contracts.wire import Command, MuteSet, Snapshot
 from snow.voice.aec import EchoCanceller
 from snow.voice.config import VoiceConfig
 from snow.voice.phrases import match_command, strip_wake
-from snow.voice.playout import Playout, StreamFactory
+from snow.voice.playout import Playout, StreamFactory, device_rate
+from snow.voice.polish import Polish
 from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
 from snow.voice.stt_router import SttRouter
@@ -494,10 +495,15 @@ class VoicePipeline:
     async def _load_tts(self, router: VoiceRouter) -> None:
         assert self._tts_cfg is not None  # noqa: S101 - a router comes with its config
         if await router.wait_ready():
+            # One rate for the speaker stream, the ring buffer and the echo reference.
+            rate = device_rate() or router.sample_rate
+            log.info(
+                "tts_output speaker_rate=%d voice_rate=%d", rate, router.sample_rate
+            )
             if self._echo_cancel:
                 try:  # ~0.9 s of import and setup: off the loop
                     self._aec = await asyncio.to_thread(
-                        EchoCanceller, self._cfg.audio.sample_rate, router.sample_rate
+                        EchoCanceller, self._cfg.audio.sample_rate, rate
                     )
                 except Exception as e:  # noqa: BLE001 - audio then passes through
                     log.warning(
@@ -507,7 +513,7 @@ class VoicePipeline:
             if aec is not None:
                 self._engine.echo_warming = aec.warming
             self._playout = Playout(
-                router.sample_rate,
+                rate,
                 self._tts_cfg.playout,
                 on_first_audio=lambda ts_ns: self._hop(self._first_audio, ts_ns),
                 on_level=lambda level: self._hop(self._tts_level, level),
@@ -575,6 +581,7 @@ class VoicePipeline:
     async def _run_reply(self, reply: _Reply) -> None:
         assert self._tts is not None  # noqa: S101
         await self._tts_ready.wait()
+        assert self._tts_cfg is not None  # noqa: S101
         playout = self._playout
         try:
             if playout is None:  # the voice did not load: stay silent, never block
@@ -583,6 +590,14 @@ class VoicePipeline:
                 self._finish(reply)
                 return
             playout.start_utterance()
+            polish = Polish(
+                self._tts_cfg.polish, self._tts.sample_rate, playout.sample_rate
+            )
+
+            def out(samples: Samples) -> None:
+                if len(samples):
+                    reply.pushed += len(samples)  # what plays, so heard(played) aligns
+                    playout.push(samples)
 
             async def texts() -> AsyncIterator[str]:
                 while (text := await reply.queue.get()) is not None:
@@ -592,15 +607,17 @@ class VoicePipeline:
                     yield text
                     # The router resumes us once it has synthesized the clause; waiting
                     # on the LLM for the next text is outside this window.
-                    playout.clause_done(time.monotonic() - started)
+                    synth_s = time.monotonic() - started
+                    out(polish.end_clause(text))
+                    playout.clause_done(synth_s)
 
             def push(audio: Samples) -> None:
                 reply.tts_first_audio_ns = reply.tts_first_audio_ns or time.time_ns()
-                reply.pushed += len(audio)
-                playout.push(audio)
+                out(polish.process(audio))
 
             # The router picks the engine and fails over mid-reply (SPCH-03).
             await self._tts.speak(texts(), reply.emotion, reply.big_moment, push)
+            out(polish.flush())  # the reverb tail and held frames play before the drain
             playout.end_utterance()  # `_drained` follows when the last sample is out
         except Exception as e:  # noqa: BLE001 - a failed voice must not wedge the loop
             log.error("tts_failed kind=%s error=%s", type(e).__name__, e)
