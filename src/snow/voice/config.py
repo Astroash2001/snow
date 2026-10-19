@@ -16,7 +16,8 @@ class AudioConfig(_Strict):
 
 
 class WakeConfig(_Strict):
-    model: str
+    model: str  # a pretrained openWakeWord name, or a repo-relative path to an .onnx
+    model_sha256: str = ""  # required for a path; the file is refused if it differs
     threshold: float
     patience_frames: int
     preroll_frames: int

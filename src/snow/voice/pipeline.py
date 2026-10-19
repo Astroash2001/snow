@@ -221,13 +221,20 @@ class VoicePipeline:
             status=status,
             detail=detail,
         )
+        wake_status, wake_detail = (
+            ("running", None)
+            if self._mic_ok
+            else ("restarting", "Microphone unavailable")
+        )
+        if self._wake.error:  # the model was refused: no mic state can fix that
+            wake_status, wake_detail = "down", self._wake.error
         self._emit(
             HealthSubsystem,
             name="wake_word",
             label="Wake word",
             owner="voice",
-            status="running" if self._mic_ok else "restarting",
-            detail=None if self._mic_ok else "Microphone unavailable",
+            status=wake_status,
+            detail=wake_detail,
         )
         if self._tts is not None:
             self._tts.announce(force=True)
@@ -822,7 +829,13 @@ def build_pipeline(
     """Real wake gate, VAD and Smart Turn wired to `source` (worker and dev tool)."""
     rate, w = cfg.audio.sample_rate, cfg.wake
     wake = WakeGate(
-        w.model, w.threshold, w.patience_frames, w.preroll_frames, w.refractory_s, rate
+        w.model,
+        w.threshold,
+        w.patience_frames,
+        w.preroll_frames,
+        w.refractory_s,
+        rate,
+        model_sha256=w.model_sha256,
     )
     engine = TurnEngine(
         cfg.turn,
