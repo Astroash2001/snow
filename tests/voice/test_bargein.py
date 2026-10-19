@@ -68,6 +68,8 @@ class AlwaysComplete:
 class NoWake:
     """The wake gate is not under test: frames go to the engine directly."""
 
+    error: str | None = None  # the model loaded fine
+
     def process(self, frame: object) -> None:
         return None
 

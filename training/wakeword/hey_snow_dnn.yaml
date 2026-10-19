@@ -1,0 +1,45 @@
+# Fallback: the same recipe with the openWakeWord-style DNN head (research Wake Word
+# Plan 3). Use it only if Snow's openWakeWord runtime cannot load the conv-attention
+# export. Everything except `model.model_type` matches hey_snow.yaml.
+
+model_name: hey_snow
+target_phrases: ["hey snow"]
+
+n_samples: 10000
+n_samples_val: 2000
+n_background_samples: 1000
+n_background_samples_val: 200
+tts_batch_size: 50
+
+custom_negative_phrases:
+  - "snow"
+  - "hey so"
+  - "hey no"
+  - "hey snowy"
+  - "slow"
+  - "say no"
+  - "hey Joe"
+  - "hey show"
+  - "hey slow"
+  - "hey sir"
+  - "a snow"
+  - "the snow"
+  - "let it snow"
+  - "hey, so anyway"
+
+data_dir: ./data
+output_dir: ./output
+
+augmentation:
+  clip_duration: 2.0
+  batch_size: 16
+  rounds: 2
+  background_paths: [./data/backgrounds, ./negatives]
+  rir_paths: [./data/rirs]
+
+model:
+  model_type: dnn
+  model_size: small
+
+steps: 50000
+target_fp_per_hour: 0.2
