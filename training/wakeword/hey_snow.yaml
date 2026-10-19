@@ -1,0 +1,49 @@
+# "Hey Snow" wake word, livekit-wakeword 0.3.0 (Apache-2.0). Steps: README.md here.
+# Key names checked against the 0.3.0 sdist (src/livekit/wakeword/config.py). The
+# config model ignores unknown keys, so a misspelt key is silently dropped: keep these.
+
+model_name: hey_snow
+target_phrases: ["hey snow"]
+
+# Synthetic data (Piper VITS, 904 speakers with SLERP blending)
+n_samples: 10000
+n_samples_val: 2000
+n_background_samples: 1000
+n_background_samples_val: 200
+tts_batch_size: 50
+
+# Phrases that sound like the wake phrase and must NOT fire (research Pitfall 2)
+custom_negative_phrases:
+  - "snow"
+  - "hey so"
+  - "hey no"
+  - "hey snowy"
+  - "slow"
+  - "say no"
+  - "hey Joe"
+  - "hey show"
+  - "hey slow"
+  - "hey sir"
+  - "a snow"
+  - "the snow"
+  - "let it snow"
+  - "hey, so anyway"
+
+data_dir: ./data
+output_dir: ./output
+
+augmentation:
+  clip_duration: 2.0
+  batch_size: 16
+  rounds: 2
+  # ./negatives holds the optional `snow dev record-negatives` WAVs you upload; it is
+  # skipped when absent. ./data/backgrounds is the MUSAN noise that `setup` downloads.
+  background_paths: [./data/backgrounds, ./negatives]
+  rir_paths: [./data/rirs]
+
+model:
+  model_type: conv_attention
+  model_size: small
+
+steps: 50000
+target_fp_per_hour: 0.2
