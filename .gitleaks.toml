@@ -1,0 +1,49 @@
+# Secret-scan rules for Snow (T-01-10). Default gitleaks rules plus Snow's provider key prefixes
+# (the same shapes src/snow/logging.py redacts). Keys live only in Windows Credential Manager.
+title = "snow"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "experiential-labs-key"
+description = "Experiential Labs API key"
+regex = '''xpl_[A-Za-z0-9_\-]{16,}'''
+keywords = ["xpl_"]
+
+[[rules]]
+id = "groq-key"
+description = "Groq API key"
+regex = '''gsk_[A-Za-z0-9_\-]{16,}'''
+keywords = ["gsk_"]
+
+[[rules]]
+id = "nvidia-nim-key"
+description = "NVIDIA NIM API key"
+regex = '''nvapi-[A-Za-z0-9_\-]{16,}'''
+keywords = ["nvapi-"]
+
+[[rules]]
+id = "openrouter-key"
+description = "OpenRouter API key"
+regex = '''sk-or-[A-Za-z0-9_\-]{16,}'''
+keywords = ["sk-or-"]
+
+[[rules]]
+id = "cartesia-key"
+description = "Cartesia API key"
+regex = '''sk_car_[A-Za-z0-9_\-]{16,}'''
+keywords = ["sk_car_"]
+
+[[rules]]
+id = "google-ai-studio-key"
+description = "Google AI Studio API key"
+regex = '''AIza[0-9A-Za-z_\-]{35}'''
+keywords = ["AIza"]
+
+# Only fake keys (both conditions must hold): test fixtures, and plan docs that quote those fixtures.
+[[allowlists]]
+description = "Fake keys in tests and plan docs"
+condition = "AND"
+paths = ['''^(tests|\.planning)/''']
+regexes = ['''(?i)(test|canary|setuptest|abc123|not_real|fake|x{8,})''']
