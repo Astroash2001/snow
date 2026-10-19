@@ -1,0 +1,126 @@
+# Snow CI (QUAL-01). GitHub Free private repos cannot enforce required checks (D-41),
+# so .githooks/pre-push runs the same gates locally via scripts/check.sh.
+# Every third-party action is pinned to a full commit SHA; the tag is in the comment.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.8"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # openWakeWord, kokoro, Moonshine and tone models land in models/; Pocket TTS uses the HF cache.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            models
+            ~/.cache/huggingface
+          key: models-v1
+
+      - run: uv sync --frozen
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      - run: uv run pyright
+      - run: uv run pytest -m "not hardware and not gpu and not network" -q
+      - name: Contract drift
+        run: uv run python -m snow.contracts.export --check
+      - name: Audio fixture drift
+        run: uv run python scripts/make_audio_fixtures.py --check
+      # Audits the hashed lock, not the venv: --strict fails on the editable snow package itself.
+      - name: Dependency audit
+        shell: bash
+        run: |
+          uv export --frozen --no-emit-project -q -o "$RUNNER_TEMP/reqs.txt"
+          uv run pip-audit --strict --disable-pip -r "$RUNNER_TEMP/reqs.txt"
+
+  hud:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # hashFiles() is not allowed in a job-level if, so the HUD guard (plan 01-07) is a step output.
+      - id: hud
+        shell: bash
+        run: echo "present=${{ hashFiles('hud/package.json') != '' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.hud.outputs.present == 'true'
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: hud/package-lock.json
+
+      - if: steps.hud.outputs.present == 'true'
+        run: npm --prefix hud ci
+      - if: steps.hud.outputs.present == 'true'
+        run: npm --prefix hud run lint
+      - if: steps.hud.outputs.present == 'true'
+        run: npm --prefix hud run typecheck
+      - if: steps.hud.outputs.present == 'true'
+        run: npm --prefix hud run test
+      - name: Generated types drift
+        if: steps.hud.outputs.present == 'true'
+        shell: bash
+        run: |
+          npm --prefix hud run gen:types
+          git diff --exit-code hud/src/generated
+      # The Electron window arrives in plan 01-09.
+      - name: Electron e2e
+        if: steps.hud.outputs.present == 'true' && hashFiles('hud/playwright.config.ts') != ''
+        run: npm --prefix hud run e2e
+      - name: Upload Playwright traces
+        if: failure() && steps.hud.outputs.present == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-traces
+          path: hud/test-results
+          if-no-files-found: ignore
+      - name: Dependency audit
+        if: steps.hud.outputs.present == 'true'
+        run: npm --prefix hud audit --omit=dev --audit-level=high
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # SHA-256 of gitleaks_8.30.1_linux_x64.tar.gz from the release's checksums.txt.
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks (checksum-verified)
+        run: |
+          f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$f" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$f"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$f" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP" gitleaks
+
+      - name: Secret scan (full history)
+        run: '"$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --no-banner --verbose .'
