@@ -1,6 +1,7 @@
 # Speech output (SPCH-03, SPCH-04). Typed by snow.voice.tts.config.TtsConfig.
 
-# Spoken only by `snow dev audition-voices`, never on Snow's reply path (SPCH-01).
+# Spoken only by dev tools (`snow dev audition-voices` and the polish A/B hardware test),
+# never on Snow's reply path (SPCH-01).
 audition_line = "Good evening. This is how I sound, so tell me whether it suits you."
 
 [audition]
@@ -40,26 +41,43 @@ hold_rtf = 0.7
 assume_headphones = false
 echo_cancellation = true
 
+[polish]
+# Voice polish, applied to every voice in the reply push path, before the playout, so the
+# echo reference matches what plays. The resample to the speaker's own rate is always on
+# and is not listed here. Every part below can be switched off for an A/B listen.
+trim_edges = true   # trim each clause's leading/trailing silence, 5 ms fades; false = off
+compressor = true   # gentle 2.5:1 compression above -26 dBFS; false = off
+makeup_db = 7.5     # louder by this much before the limiter (-1 dBFS ceiling); 0 = off
+pace = 0.93         # slower and lower together (about -1.3 semitones); 1.0 = off
+sentence_pause_ms = 180  # silence after . ? ! between clauses; 0 = off
+comma_pause_ms = 70      # silence after , ; : and a dash; 0 = off
+eq = true           # warmth + presence + 10 kHz roll-off; false = off
+warmth_db = 3.0     # low-shelf boost around 180 Hz (-6..6); 0 = flat
+presence_db = 2.0   # bell boost around 2.8 kHz (-6..6); 0 = flat
+reverb_wet = 0.06   # short, quiet plate-style reverb (0..0.2); 0 = off
+
 [engines.pocket_tts]
 enabled = true
 # The base voice. `path` is a built-in preset name, a .safetensors voice state or an audio
 # file; `consent` is mandatory (self, consenting_person or licensed_preset) and a clip
-# without it is refused at start (D-05, T-01-50). marius is a Kyutai voice donation, CC0
-# (kyutai/tts-voices, voice-donations/Selfie.wav). `snow dev audition-voices` rewrites this.
-reference = { path = "marius", consent = "licensed_preset" }
+# without it is refused at start (D-05, T-01-50). paul is Kyutai's VCTK preset p259
+# (CC BY 4.0, credit the dataset before any distribution); research measured it the
+# slowest and flattest of the presets the user liked. george (VCTK p315) is the A/B
+# alternative: swap these six paths. `snow dev audition-voices` still rewrites them.
+reference = { path = "paul", consent = "licensed_preset" }
 torch_threads = 4
 
 # D-34: the reply emotion picks a mood clip of the SAME voice. Until a licensed set of
-# one speaker in several moods is available, every mood uses the base preset, so the
-# mood does not change the sound yet. Kyutai's expressive sets (expresso, ears) are
+# one speaker in several moods is available, every mood uses the base voice (paul), so
+# the mood does not change the sound yet. Kyutai's expressive sets (expresso, ears) are
 # non-commercial, and an audio clip needs the gated Pocket TTS weights with voice
 # cloning (the user accepts those terms at huggingface.co/kyutai/pocket-tts).
 [engines.pocket_tts.moods]
-calm = { path = "marius", consent = "licensed_preset" }
-upbeat = { path = "marius", consent = "licensed_preset" }
-serious = { path = "marius", consent = "licensed_preset" }
-playful = { path = "marius", consent = "licensed_preset" }
-sympathetic = { path = "marius", consent = "licensed_preset" }
+calm = { path = "paul", consent = "licensed_preset" }
+upbeat = { path = "paul", consent = "licensed_preset" }
+serious = { path = "paul", consent = "licensed_preset" }
+playful = { path = "paul", consent = "licensed_preset" }
+sympathetic = { path = "paul", consent = "licensed_preset" }
 
 # The emotions the brain may choose (persona.toml allowed_emotions) -> a mood above.
 # An emotion not listed here speaks in the calm mood.

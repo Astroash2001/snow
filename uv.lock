@@ -1368,6 +1368,7 @@ dependencies = [
     { name = "pywin32", marker = "sys_platform == 'win32'" },
     { name = "sounddevice", marker = "sys_platform == 'win32'" },
     { name = "soundfile", marker = "sys_platform == 'win32'" },
+    { name = "soxr", marker = "sys_platform == 'win32'" },
     { name = "structlog", marker = "sys_platform == 'win32'" },
     { name = "websockets", marker = "sys_platform == 'win32'" },
 ]
@@ -1398,6 +1399,7 @@ requires-dist = [
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = "==312" },
     { name = "sounddevice", specifier = "==0.5.6" },
     { name = "soundfile" },
+    { name = "soxr", specifier = "==1.0.0" },
     { name = "structlog", specifier = "==26.1.0" },
     { name = "websockets", specifier = "==17.2" },
 ]

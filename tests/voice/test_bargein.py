@@ -23,7 +23,14 @@ from snow.voice.stt_groq import GroqStt
 from snow.voice.tts.router import VoiceRouter
 from snow.voice.turn import CHUNK, TurnEngine
 from snow.voice.wake import WakeHit
-from tests.voice.conftest import CFG, FakeGroq, FakeHub, StubSource, until
+from tests.voice.conftest import (
+    CFG,
+    FakeGroq,
+    FakeHub,
+    StubSource,
+    tts_cfg_polish_off,
+    until,
+)
 from tests.voice.test_tts_pipeline import (
     RATE,
     TTS_CFG,
@@ -150,8 +157,10 @@ async def make_rig(
     pipeline._tone.analyze = lambda *a: None  # type: ignore[method-assign,assignment]  # noqa: SLF001
     rig: Rig
     speaker = TimedSpeaker(lambda: rig.aborts.append(rig.mic))
-    pipeline._tts = VoiceRouter({"pocket_tts": voice}, TTS_CFG, pipeline._emit)  # noqa: SLF001
-    pipeline._tts_cfg = TTS_CFG  # noqa: SLF001
+    # Exact sample arithmetic (what had played by 0.6 s): no polish pace or pauses.
+    cfg = tts_cfg_polish_off(TTS_CFG)
+    pipeline._tts = VoiceRouter({"pocket_tts": voice}, cfg, pipeline._emit)  # noqa: SLF001
+    pipeline._tts_cfg = cfg  # noqa: SLF001
     pipeline._stream_factory = speaker.factory  # noqa: SLF001
     rig = Rig(pipeline, hub, voice, speaker, vad, turn)
     on_turn_end = pipeline.on_turn_end

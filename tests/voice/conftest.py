@@ -32,6 +32,7 @@ from snow.voice.config import VoiceConfig
 from snow.voice.pipeline import LocalSource, VoicePipeline
 from snow.voice.sources import FileSource, Frame, OnFrame
 from snow.voice.stt_groq import GroqStt
+from snow.voice.tts.config import PolishConfig, TtsConfig
 from snow.voice.turn import TurnEngine
 from snow.voice.vad import EndOfTurn, VadDetector
 from snow.voice.wake import WakeGate, WakeHit, model_files
@@ -139,6 +140,32 @@ class FakeGroq:
         start = body.index(b"RIFF")  # the WAV part inside the multipart body
         with wave.open(io.BytesIO(body[start:]), "rb") as w:
             return w.getnframes() / w.getframerate()
+
+
+@pytest.fixture(autouse=True)
+def no_device_rate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The voice keeps its own rate in tests: no real audio device is ever queried."""
+    monkeypatch.setattr("snow.voice.pipeline.device_rate", lambda: None)
+
+
+def polish_off() -> PolishConfig:
+    """Every polish part off (the device-rate resample is not one): exact maths."""
+    return PolishConfig(
+        trim_edges=False,
+        compressor=False,
+        makeup_db=0.0,
+        pace=1.0,
+        sentence_pause_ms=0,
+        comma_pause_ms=0,
+        eq=False,
+        warmth_db=3.0,
+        presence_db=2.0,
+        reverb_wet=0.0,
+    )
+
+
+def tts_cfg_polish_off(cfg: TtsConfig) -> TtsConfig:
+    return cfg.model_copy(update={"polish": polish_off()})
 
 
 @pytest.fixture

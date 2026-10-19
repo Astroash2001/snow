@@ -66,8 +66,9 @@ class FakeEngine:
 
 
 class FakeStream:
-    def __init__(self, callback: Callable[..., None]) -> None:
+    def __init__(self, callback: Callable[..., None], rate: int = RATE) -> None:
         self.callback = callback
+        self.rate = rate
         self.calls: list[str] = []
 
     def start(self) -> None:
@@ -81,21 +82,22 @@ class FakeStream:
 
     def pump(self, blocks: int = 1) -> None:
         for _ in range(blocks):
-            out = np.zeros((int(RATE * 0.02), 1), dtype=np.float32)
+            out = np.zeros((int(self.rate * 0.02), 1), dtype=np.float32)
             self.callback(out, len(out), None, None)
 
 
 class Speaker:
     """The fake output device; `pump` plays 20 ms blocks as a real one would."""
 
-    def __init__(self) -> None:
+    def __init__(self, rate: int = RATE) -> None:
+        self.rate = rate  # the rate the stream must be opened at
         self.stream: FakeStream | None = None
 
     def factory(
         self, rate: int, block: int, callback: Callable[..., None]
     ) -> FakeStream:
-        assert rate == RATE
-        self.stream = FakeStream(callback)
+        assert rate == self.rate
+        self.stream = FakeStream(callback, rate)
         return self.stream
 
 
@@ -122,13 +124,19 @@ class StubTurnEngine:
 
 
 async def setup(
-    engine: FakeEngine | None = None, *, waiting: bool = True
+    engine: FakeEngine | None = None,
+    *,
+    waiting: bool = True,
+    cfg: TtsConfig = TTS_CFG,
+    rate: int = RATE,
+    echo_cancel: bool = False,
 ) -> tuple[VoicePipeline, FakeHub, FakeEngine, Speaker, StubTurnEngine]:
     engine = engine or FakeEngine()
-    hub, speaker = FakeHub(), Speaker()
+    hub, speaker = FakeHub(), Speaker(rate)
     pipeline = make_pipeline(hub, StubSource())
-    pipeline._tts = VoiceRouter({"pocket_tts": engine}, TTS_CFG, pipeline._emit)  # noqa: SLF001
-    pipeline._tts_cfg = TTS_CFG  # noqa: SLF001
+    pipeline._echo_cancel = echo_cancel  # noqa: SLF001
+    pipeline._tts = VoiceRouter({"pocket_tts": engine}, cfg, pipeline._emit)  # noqa: SLF001
+    pipeline._tts_cfg = cfg  # noqa: SLF001
     pipeline._stream_factory = speaker.factory  # noqa: SLF001
     turn = StubTurnEngine(pipeline)
     turn.waiting = waiting
@@ -188,6 +196,41 @@ async def test_a_reply_is_spoken_and_the_orb_follows() -> None:
     assert spoken[0].first_audio_ms is not None
     assert turn.finished == 1  # the wait ends at the end of playback, once
     assert pipeline._pending is None  # noqa: SLF001
+
+
+class RecordingAec:
+    """Stands in for the echo canceller: records the rates it was built with."""
+
+    def __init__(self, capture_rate: int, render_rate: int) -> None:
+        self.rates = (capture_rate, render_rate)
+        self.rendered = 0
+
+    def warming(self) -> bool:
+        return False
+
+    def render(self, block: np.ndarray[Any, Any]) -> None:
+        self.rendered += len(block)
+
+    def close(self) -> None: ...
+
+
+async def test_a_reply_reaches_the_speaker_at_the_device_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("snow.voice.pipeline.device_rate", lambda: 48000)
+    monkeypatch.setattr("snow.voice.pipeline.EchoCanceller", RecordingAec)
+    pipeline, hub, _engine, speaker, _turn = await setup(rate=48000, echo_cancel=True)
+    aec = pipeline._aec  # noqa: SLF001
+    assert isinstance(aec, RecordingAec)
+    assert aec.rates[1] == 48000  # the echo reference is at the playout rate
+    assert pipeline._playout is not None  # noqa: SLF001
+    assert pipeline._playout.sample_rate == 48000  # noqa: SLF001
+    await pipeline.on_hub_event(delta("Hello there, my friend."))
+    await pipeline.on_hub_event(final("Hello there, my friend."))
+    await play_out(pipeline, hub, speaker)
+
+    assert [e.state for e in of(hub, PresenceState)] == ["speaking", "listening"]
+    assert aec.rendered > 0  # on_render saw what played
 
 
 async def test_tts_levels_flow_only_while_speaking() -> None:

@@ -28,9 +28,17 @@ def test_sanitize_keeps_snake_case_words() -> None:
     )
 
 
-def test_first_chunk_ends_at_the_first_clause_with_three_words() -> None:
+def test_first_chunk_ends_at_a_clause_only_once_eight_words_have_arrived() -> None:
     c = SentenceChunker()
-    assert c.feed("Well, I think so, yes. ") == ["Well, I think so,", "yes."]
+    assert c.feed("Well, I think so, yes. ") == ["Well, I think so, yes."]
+    c = SentenceChunker()
+    long = (
+        "Right then, I have looked through the whole folder, and nothing is missing. "
+    )
+    assert c.feed(long) == [
+        "Right then, I have looked through the whole folder,",
+        "and nothing is missing.",
+    ]
     assert c.feed("Next, one more thing. ") == [
         "Next, one more thing."
     ]  # first is over
@@ -44,8 +52,12 @@ def test_a_short_first_clause_waits_for_the_sentence_end() -> None:
 
 def test_decimals_and_abbreviations_do_not_split() -> None:
     c = SentenceChunker()
-    out = c.feed("Dr. Smith pays 3.5 dollars, e.g. a lot. Done! ")
-    assert out == ["Dr. Smith pays 3.5 dollars,", "e.g. a lot.", "Done!"]
+    out = c.feed("Dr. Smith pays 3.5 dollars for the whole lot, e.g. a lot. Done! ")
+    assert out == [
+        "Dr. Smith pays 3.5 dollars for the whole lot,",
+        "e.g. a lot.",
+        "Done!",
+    ]
 
 
 def test_a_boundary_needs_the_next_character() -> None:
@@ -69,7 +81,10 @@ def test_flush_resets_for_the_next_reply() -> None:
     c = SentenceChunker()
     c.feed("```open fence")
     c.flush()
-    assert c.feed("Hello there you, friend. ") == ["Hello there you,", "friend."]
+    assert c.feed("Well hello there to you all out there, friend. ") == [
+        "Well hello there to you all out there,",
+        "friend.",
+    ]
 
 
 def test_punctuation_alone_is_not_a_chunk() -> None:
