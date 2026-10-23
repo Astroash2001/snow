@@ -38,8 +38,19 @@ from snow.voice.vad import EndOfTurn, VadDetector
 from snow.voice.wake import WakeGate, WakeHit, model_files
 
 SR = 16000
-CFG = load_config("voice.toml", VoiceConfig)
 AUDIO = Path(__file__).resolve().parents[1] / "fixtures" / "audio"
+HEY_SNOW = Path(__file__).resolve().parents[2] / "models" / "wakeword" / "hey_snow.onnx"
+
+
+def voice_cfg() -> VoiceConfig:
+    """voice.toml waking on the pretrained hey_jarvis stand-in: the fixtures say
+    "Hey Jarvis", and the trained hey_snow model is gitignored (CI never has it)."""
+    cfg = load_config("voice.toml", VoiceConfig)
+    wake = cfg.wake.model_copy(update={"model": "hey_jarvis", "model_sha256": ""})
+    return cfg.model_copy(update={"wake": wake})
+
+
+CFG = voice_cfg()
 GROQ_PATH = "/openai/v1/audio/transcriptions"
 
 
@@ -208,14 +219,21 @@ def run_fixture(groq: FakeGroq, wake_models: None) -> RunFixture:
         replies: bool = False,
         source_factory: SourceFactory = FileSource,
         local: LocalSource | None = None,
+        configured_wake: bool = False,
     ) -> Run:
-        """`replies`: the hub answers every transcript, so the next turn is heard."""
+        """`replies`: the hub answers every transcript, so the next turn is heard.
+        `configured_wake`: wake on voice.toml's own model instead of the stand-in."""
         groq.text = text
-        cfg = load_config("voice.toml", VoiceConfig)
+        cfg = voice_cfg()
         hub = FakeHub()
-        w = cfg.wake
+        w = load_config("voice.toml", VoiceConfig).wake if configured_wake else cfg.wake
         wake = WakeGate(
-            w.model, w.threshold, w.patience_frames, w.preroll_frames, w.refractory_s
+            w.model,
+            w.threshold,
+            w.patience_frames,
+            w.preroll_frames,
+            w.refractory_s,
+            model_sha256=w.model_sha256,
         )
         engine = TurnEngine(
             cfg.turn, VadDetector(), EndOfTurn(), conversation=cfg.conversation

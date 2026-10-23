@@ -6,14 +6,22 @@ sample_rate = 16000
 frame_samples = 1280 # 80 ms; the frame size openWakeWord expects
 
 [wake]
-# Pretrained stand-in until the "hey snow" model is trained (D-41, plan 01-30).
-model = "hey_jarvis"
+# The user's trained "hey snow" model (D-41, plan 01-30; recipe in training/wakeword).
+# The file is gitignored: when it is absent Snow reports wake_word down and stays deaf.
+model = "models/wakeword/hey_snow.onnx"
+model_sha256 = "db2bc395d5e5676694ac258a8b258b2e087eb9d5ff47b3783d047f8d19be283b"
+# A/B baseline: the pretrained stand-in. Its weights are CC BY-NC-SA 4.0 (personal use only).
+# model = "hey_jarvis"
+# 0.5, not the eval's optimal 0.21: the look-alike "hey so" peaks up to 0.75 on synthetic
+# voices. Recalibrate from tests/hardware/test_wake_fp.py on the real mic.
 threshold = 0.5
 patience_frames = 2
 preroll_frames = 4   # 4 x 80 ms of RAM-only audio before the hit joins the turn (D-09)
 refractory_s = 1.5
 # Leading wake phrase and common ASR mishearings, stripped from the transcript.
 strip_patterns = [
+    '^\W*(?:hey|hay|hi|hello|ok|okay|a|hey,? a)[\s,.!?-]*(?:snow|sno|snoh|snoe)\b[\s,.!?:;-]*',
+    # the A/B stand-in's phrase, kept while the hey_jarvis line above exists
     '^\W*(?:hey|hay|hi|hello|ok|okay|a|hate|hey,? a)[\s,.!?-]*(?:jarvis|jervis|jarvus|jarves|jarvas|javas|service)\b[\s,.!?:;-]*',
     '^\W*(?:jarvis|jervis)\b[\s,.!?:;-]*',
 ]
@@ -55,9 +63,9 @@ key_name = "groq"
 model = "whisper-large-v3-turbo"
 language = "en"
 timeout_s = 8
-# Whisper spelling hints (up to 224 tokens). "Jarvis" helps the wake-phrase strip patterns
-# catch the stand-in wake word; change it together with the wake word.
-prompt = "Hey Jarvis. Snow, Claude Code, Antigravity, OpenCode."
+# Whisper spelling hints (up to 224 tokens). "Hey Snow" helps the wake-phrase strip
+# patterns catch the wake word; change it together with the wake word.
+prompt = "Hey Snow. Claude Code, Antigravity, OpenCode."
 # A turn is dropped (no transcript, no reply) when every segment has no_speech_prob at or
 # above the first and avg_logprob at or below the second: Whisper's own silence rule. The
 # gap study suggested the tighter 0.4 / -0.5; this is the safer start because the mic sits

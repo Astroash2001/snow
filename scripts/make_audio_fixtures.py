@@ -6,8 +6,10 @@
 Speech comes from kokoro-onnx (voice KOKORO_VOICE), never from a microphone, so
 no real voice or conversation audio is ever committed (D-18). The wake phrase is
 "Hey Jarvis" because the pretrained openWakeWord ``hey_jarvis`` model is the
-stand-in until a "hey snow" model is trained (D-41). Model files are cached
-under the ignored ``models/`` directory and pinned by SHA-256.
+A/B stand-in the flow tests run on. ``hey_snow_*`` fixtures are scored with the
+user's trained ``models/wakeword/hey_snow.onnx`` instead; that file is gitignored, so
+--check skips their wake score when it is absent (CI). Model files are cached under
+the ignored ``models/`` directory and pinned by SHA-256.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "tests" / "fixtures" / "audio"
 KOKORO_DIR = ROOT / "models" / "kokoro"
 OWW_DIR = ROOT / "models" / "openwakeword"
+HEY_SNOW = ROOT / "models" / "wakeword" / "hey_snow.onnx"
 
 SR = 16_000
 # British male "Jarvis" voice; every wake fixture scored >= 0.99 in the audition.
@@ -200,22 +203,33 @@ FIXTURES.update(
             (7.0, 10.0),
             True,
         ),
+        "hey_snow_cmd": (
+            lambda s: _join(s.say("Hey Snow, what time is it?")),
+            (2.5, 4.5),
+            True,
+        ),
         "tone_calm": (lambda s: _tone_sentence(s, 0.85, -10.0), (4.0, 7.5), False),
         "tone_stressed": (lambda s: _tone_sentence(s, 1.35, 6.0), (2.5, 5.0), False),
     }
 )
 
 
-def _wake_score(path: Path) -> float:
+def _wake_model(name: str) -> Path:
+    if name.startswith("hey_snow"):
+        return HEY_SNOW
+    if not (OWW_DIR / "hey_jarvis_v0.1.onnx").exists():
+        from openwakeword.utils import download_models  # noqa: PLC0415
+
+        download_models(model_names=["hey_jarvis"], target_directory=str(OWW_DIR))
+    return OWW_DIR / "hey_jarvis_v0.1.onnx"
+
+
+def _wake_score(path: Path, wake_model: Path) -> float:
     from openwakeword.model import Model  # noqa: PLC0415 - only needed to score
 
     models = OWW_DIR
-    if not (models / "hey_jarvis_v0.1.onnx").exists():
-        from openwakeword.utils import download_models  # noqa: PLC0415
-
-        download_models(model_names=["hey_jarvis"], target_directory=str(models))
     model = Model(
-        wakeword_models=[str(models / "hey_jarvis_v0.1.onnx")],
+        wakeword_models=[str(wake_model)],
         inference_framework="onnx",
         melspec_model_path=str(models / "melspectrogram.onnx"),
         embedding_model_path=str(models / "embedding_model.onnx"),
@@ -246,16 +260,19 @@ def check() -> bool:
             )
         if not lo <= info.duration <= hi:
             problems.append(f"duration {info.duration:.2f}s outside {lo}-{hi}s")
-        score = _wake_score(path)
-        if wake and score < WAKE_MIN:
-            problems.append(f"wake score {score:.3f} < {WAKE_MIN}")
-        if not wake and score >= NEG_MAX:
-            problems.append(f"negative scored {score:.3f} >= {NEG_MAX}")
+        wake_model = _wake_model(name)
+        scored = f"{wake_model.stem} absent, wake score skipped"
+        if wake_model.exists():
+            score = _wake_score(path, wake_model)
+            scored = f"{wake_model.stem}={score:.3f}"
+            if wake and score < WAKE_MIN:
+                problems.append(f"wake score {score:.3f} < {WAKE_MIN}")
+            if not wake and score >= NEG_MAX:
+                problems.append(f"negative scored {score:.3f} >= {NEG_MAX}")
         ok &= not problems
         print(
             f"{'FAIL' if problems else 'PASS'} {name}: 16 kHz mono int16 "
-            f"{info.duration:.2f}s "
-            f"hey_jarvis={score:.3f}" + "".join(f" [{p}]" for p in problems)
+            f"{info.duration:.2f}s {scored}" + "".join(f" [{p}]" for p in problems)
         )
     return ok
 
