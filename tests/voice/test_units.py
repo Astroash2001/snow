@@ -31,6 +31,13 @@ def test_normalize() -> None:
         ("a jarvis what time is it", "what time is it"),
         ("What does Jarvis mean?", "What does Jarvis mean?"),
         ("Hey Jarvis.", ""),
+        ("Hey Snow, what time is it?", "what time is it?"),
+        ("hey, snow. Open the editor", "Open the editor"),
+        ("Hay sno what time is it", "what time is it"),
+        ("a snow, mute", "mute"),
+        ("hey snoh", ""),
+        ("Let it snow", "Let it snow"),
+        ("Is it going to snow? Hey snow", "Is it going to snow? Hey snow"),
     ],
 )
 def test_strip_wake(heard: str, expected: str) -> None:

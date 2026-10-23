@@ -1,9 +1,12 @@
-"""End to end on the plan 01-05 fixtures with real wake, VAD and Smart Turn (CPU)."""
+"""End to end on the plan 01-05 fixtures with real wake, VAD and Smart Turn (CPU).
+
+The "Hey Jarvis" fixtures run on the pretrained stand-in; hey_snow_cmd runs on the
+configured (trained, gitignored) hey_snow model and skips where it is absent (CI)."""
 
 import pytest
 
 from snow.contracts.events import TranscriptFinal
-from tests.voice.conftest import SR, FakeGroq, RunFixture, speech_end_s
+from tests.voice.conftest import HEY_SNOW, SR, FakeGroq, RunFixture, speech_end_s
 
 WAKE_TEXT = "Hey Jarvis, what is the capital of France?"
 
@@ -59,3 +62,20 @@ async def test_wake_phrase_alone_sends_nothing(
     run = await run_fixture("wake_only", "Hey Jarvis.")
     assert run.hub.types()[0] == "wake.detected"
     assert "transcript.final" not in run.hub.types()
+
+
+@pytest.mark.skipif(
+    not HEY_SNOW.exists(),
+    reason="trained hey_snow.onnx is gitignored (training/wakeword)",
+)
+async def test_hey_snow_on_the_configured_model_strips_and_keeps_the_command(
+    groq: FakeGroq, run_fixture: RunFixture
+) -> None:
+    run = await run_fixture(
+        "hey_snow_cmd", "Hey Snow, what time is it?", configured_wake=True
+    )
+    assert run.hub.types()[0] == "wake.detected"
+    finals = [e for e in run.hub.events if isinstance(e, TranscriptFinal)]
+    assert [f.text for f in finals] == ["what time is it?"]
+    command_s = speech_end_s("hey_snow_cmd") - run.hits[0].at_sample / SR
+    assert groq.uploaded_seconds() >= command_s + 0.3

@@ -165,6 +165,9 @@ def fast_first(models_toml: str, model: str) -> str:
 async def run_turns(turns: int) -> Result:
     """`turns` spoken commands through the running stack; the result is per turn."""
     cfg = load_config("voice.toml", VoiceConfig)
+    # the command clips say "Hey Jarvis": wake on the pretrained stand-in
+    wake = cfg.wake.model_copy(update={"model": "hey_jarvis", "model_sha256": ""})
+    cfg = cfg.model_copy(update={"wake": wake})
     tts_cfg = load_config("tts.toml", TtsConfig)
     loop = Loopback()
     loop.brain = BrainWorker(loop.from_brain)

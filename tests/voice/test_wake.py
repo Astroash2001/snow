@@ -3,16 +3,12 @@
 import httpx2
 
 from snow.config.secrets import Secret
-from snow.config.settings import load_config
 from snow.contracts.events import TranscriptFinal
-from snow.voice.config import VoiceConfig
 from snow.voice.devinput import inject, play
 from snow.voice.sources import read_wav
 from snow.voice.stt_groq import GroqStt
 from snow.voice.wake import WakeGate
-from tests.voice.conftest import AUDIO, FakeGroq, FakeHub
-
-CFG = load_config("voice.toml", VoiceConfig)
+from tests.voice.conftest import AUDIO, CFG, FakeGroq, FakeHub
 
 
 def hits(name: str) -> list[float]:
