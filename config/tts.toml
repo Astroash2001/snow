@@ -20,7 +20,9 @@ pocket_voices = ["marius", "javert", "george", "charles", "paul", "michael", "pe
 # D-33: Cartesia for big moments, Chatterbox only on mains power with the GPU idle,
 # Pocket TTS everyday, Kokoro last. The router walks this list per reply and skips an
 # engine that is disabled below, not registered, ineligible for the reply or failing.
-order = ["cartesia", "chatterbox", "pocket_tts", "kokoro"]
+# User choice 2026-10-24: every reply in one voice, Kokoro bm_daniel at 0.8 (the user's
+# reference script in the jarvis-voice folder). Pocket TTS only if Kokoro fails.
+order = ["kokoro", "pocket_tts"]
 # An engine that errored mid-reply is left alone this long, then tried again.
 cooldown_s = 60.0
 
@@ -48,13 +50,13 @@ echo_cancellation = true
 trim_edges = true   # trim each clause's leading/trailing silence, 5 ms fades; false = off
 compressor = true   # gentle 2.5:1 compression above -26 dBFS; false = off
 makeup_db = 7.5     # louder by this much before the limiter (-1 dBFS ceiling); 0 = off
-pace = 0.93         # slower and lower together (about -1.3 semitones); 1.0 = off
+pace = 1.0          # 1.0 = off: Kokoro speed carries the pace, unpitched (user choice 2026-10-24)
 sentence_pause_ms = 180  # silence after . ? ! between clauses; 0 = off
 comma_pause_ms = 70      # silence after , ; : and a dash; 0 = off
-eq = true           # warmth + presence + 10 kHz roll-off; false = off
+eq = false          # off so the voice sounds exactly like the reference; true = warmth + presence + 10 kHz roll-off
 warmth_db = 3.0     # low-shelf boost around 180 Hz (-6..6); 0 = flat
 presence_db = 2.0   # bell boost around 2.8 kHz (-6..6); 0 = flat
-reverb_wet = 0.06   # short, quiet plate-style reverb (0..0.2); 0 = off
+reverb_wet = 0.0   # off (reference is dry); was 0.06 short plate-style reverb (0..0.2)
 
 [engines.pocket_tts]
 enabled = true
@@ -90,16 +92,17 @@ sympathetic = "sympathetic"
 excited = "upbeat"
 
 [engines.kokoro]
-# Last-resort local voice (SPCH-03): British male. Not streaming, so the first clause is
+# Everyday voice since 2026-10-24 (SPCH-03): British male bm_daniel. Full-precision model, the same
+# weights as the reference .pth. Not streaming, so the first clause is
 # kept short. Files come from the official kokoro-onnx release into models/kokoro/ on first
 # use and are checked against these SHA-256 values before they are loaded.
 enabled = true
-voice = "bm_george"
-speed = 1.0
+voice = "bm_daniel"
+speed = 0.8
 threads = 4
-model_url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx"
+model_url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
 voices_url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
-model_sha256 = "6e742170d309016e5891a994e1ce1559c702a2ccd0075e67ef7157974f6406cb"
+model_sha256 = "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5"
 voices_sha256 = "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
 
 [engines.cartesia]
