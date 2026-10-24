@@ -392,7 +392,9 @@ test("tooltip, menu, orb icon and the confirmed mute label follow the core", asy
     // Mute from the tray sends the command by "tray" and changes nothing until the core confirms.
     c.emit("presence.state", { state: "listening", mode: "awake" });
     await expect.poll(() => c.hook((h) => h.tooltip())).toBe("Snow: Listening");
-    const unmuted = await c.hook((h) => h.iconHash());
+    // The icon eases back from the thinking hue; a slow runner is still mid-fade here.
+    await expect.poll(() => c.hook((h) => h.iconHash())).toBe(listening);
+    const unmuted = listening;
     expect(await c.hook((h) => h.clickMenu("Mute microphone"))).toBe(true);
     await expect
       .poll(() => commands(c.hub).filter((m) => m.type === "cmd.mute.set"))
