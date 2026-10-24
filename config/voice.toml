@@ -33,7 +33,7 @@ stop_secs = 0.2
 max_silence_secs = 3.0
 max_turn_secs = 30
 wake_alone_window_s = 1.0
-barge_in_min_ms = 250  # used by plan 01-29
+barge_in_min_ms = 500  # was 250: the Kokoro voice's echo residual reached a 0.42 s run and cut a reply (2026-10-24)
 # Used while the echo canceller has heard under ~2 s of Snow's voice: its cold residual
 # measured up to 352 ms, so a first reply cannot cut itself off.
 barge_in_warmup_min_ms = 600

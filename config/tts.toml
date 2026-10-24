@@ -20,7 +20,7 @@ pocket_voices = ["marius", "javert", "george", "charles", "paul", "michael", "pe
 # D-33: Cartesia for big moments, Chatterbox only on mains power with the GPU idle,
 # Pocket TTS everyday, Kokoro last. The router walks this list per reply and skips an
 # engine that is disabled below, not registered, ineligible for the reply or failing.
-# User choice 2026-10-24: every reply in one voice, Kokoro bm_daniel at 0.8 (the user's
+# User choice 2026-10-24: every reply in one voice, Kokoro bm_daniel at 0.85 (the user's
 # reference script in the jarvis-voice folder). Pocket TTS only if Kokoro fails.
 order = ["kokoro", "pocket_tts"]
 # An engine that errored mid-reply is left alone this long, then tried again.
@@ -98,7 +98,7 @@ excited = "upbeat"
 # use and are checked against these SHA-256 values before they are loaded.
 enabled = true
 voice = "bm_daniel"
-speed = 0.8
+speed = 0.85  # the reference used 0.8; user asked for a touch faster
 threads = 4
 model_url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
 voices_url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
