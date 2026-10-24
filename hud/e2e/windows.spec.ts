@@ -110,11 +110,15 @@ async function launch(
         fn.toString(),
       ),
     mini: async () => {
+      // The window can exist before its page has loaded the title: wait for the page.
+      let mini: Page | undefined;
       await expect
-        .poll(async () => (await windows()).some((w) => w.title === "Snow mini"))
+        .poll(async () => {
+          for (const p of app.windows()) if ((await p.title()) === "Snow mini") mini = p;
+          return mini !== undefined;
+        })
         .toBe(true);
-      for (const p of app.windows()) if ((await p.title()) === "Snow mini") return p;
-      throw new Error("mini page not found");
+      return mini as Page;
     },
   };
   // The shell is up once the dashboard page's socket is.
