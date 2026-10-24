@@ -248,7 +248,7 @@ async def test_tts_levels_flow_only_while_speaking() -> None:
     assert order[:first] == [] and order[last + 1 :] == []
     levels = of(hub, AudioLevel)
     assert levels
-    # A sentence pause is true silence (level 0.0) once reverb is off; speech is above it.
+    # A sentence pause is true silence (0.0) once reverb is off; speech is above it.
     assert all(e.channel == "tts" and 0.0 <= e.level <= 1.0 for e in levels)
     assert any(e.level > 0.0 for e in levels)
 
