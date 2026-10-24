@@ -113,6 +113,7 @@ class WakeGate:
         self._streak = 0
         self._samples = 0
         self._quiet_until = 0
+        self.last_score = 0.0  # the latest frame's score, for calibration tools
 
     def reset(self) -> None:
         """Forget all audio heard so far (no pre-mute audio in a later pre-roll)."""
@@ -128,6 +129,7 @@ class WakeGate:
             return None
         scores: dict[str, float] = self._model.predict(frame)  # pyright: ignore[reportUnknownMemberType, reportAssignmentType, reportUnknownVariableType]
         score = float(max(scores.values()))
+        self.last_score = score
         if self._samples < self._quiet_until:
             return None
         self._streak = self._streak + 1 if score >= self._threshold else 0

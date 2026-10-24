@@ -15,10 +15,12 @@ across the room, from the doorway). A short beep means "say it now". Target: at 
     uv run pytest -m hardware tests/hardware/test_wake_fp.py -k recall -s -q
 """
 
+import math
 import os
 import queue
 import winsound
 
+import numpy as np
 import pytest
 
 from snow.config.settings import load_config
@@ -49,16 +51,26 @@ def _gate() -> WakeGate:
     return g
 
 
-def _hits(g: WakeGate, frames: "queue.Queue[Frame]", seconds: float) -> int:
-    """Detections in the next `seconds` of microphone audio, printed as they fire."""
+def _hits(
+    g: WakeGate, frames: "queue.Queue[Frame]", seconds: float, *, levels: bool = False
+) -> int:
+    """Detections in the next `seconds` of microphone audio, printed as they fire.
+    With `levels`, also the best score and the loudest frame, to tell a quiet mic
+    (low dBFS) from a model that does not know the voice (loud but low score)."""
     count, heard, need = 0, 0, int(seconds * CFG.audio.sample_rate)
+    best, loudest = 0.0, -120.0
     while heard < need:
         frame = frames.get(timeout=5)
         heard += len(frame)
         hit = g.process(frame)
+        best = max(best, g.last_score)
+        rms = float(np.sqrt(np.mean(frame.astype(np.float64) ** 2))) / 32768
+        loudest = max(loudest, 20 * math.log10(max(rms, 1e-6)))
         if hit is not None:
             count += 1
             print(f"    wake at {heard / CFG.audio.sample_rate:.1f} s: {hit.score:.2f}")
+    if levels:
+        print(f"    best score {best:.2f}, loudest {loudest:.0f} dBFS")
     return count
 
 
@@ -100,7 +112,7 @@ def test_recall_on_the_users_voice() -> None:
                 while not frames.empty():  # drop pre-prompt audio and the beep
                     frames.get_nowait()
                 print(f'  {i + 1}/{count}: say "Hey Snow" now', flush=True)
-                hit = _hits(g, frames, _LISTEN_S) > 0
+                hit = _hits(g, frames, _LISTEN_S, levels=True) > 0
                 heard += hit
                 total += 1
                 print("    heard" if hit else "    missed")
