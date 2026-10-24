@@ -9,13 +9,15 @@ False accepts per hour, with normal room noise and the TV on, for at least two h
     uv run pytest -m hardware tests/hardware/test_wake_fp.py -k false_accepts -s -q
 
 Recall: say "Hey Snow" when prompted, 50 times across three distances (arm's length,
-across the room, from the doorway). Target: at least 90 %.
+across the room, from the doorway). A short beep means "say it now". Target: at least
+90 %.
 
     uv run pytest -m hardware tests/hardware/test_wake_fp.py -k recall -s -q
 """
 
 import os
 import queue
+import winsound
 
 import pytest
 
@@ -94,7 +96,8 @@ def test_recall_on_the_users_voice() -> None:
             input(f'\nStand {where}, then press Enter. Say "Hey Snow" at each prompt.')
             for i in range(count):
                 g.reset()
-                while not frames.empty():  # drop audio from before the prompt
+                winsound.Beep(1000, 150)  # "speak now" from far away; blocks until done
+                while not frames.empty():  # drop pre-prompt audio and the beep
                     frames.get_nowait()
                 print(f'  {i + 1}/{count}: say "Hey Snow" now', flush=True)
                 hit = _hits(g, frames, _LISTEN_S) > 0
