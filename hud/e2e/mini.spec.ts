@@ -105,9 +105,15 @@ async function withHud(snapshot: Partial<Snapshot>, run: (ctx: Ctx) => Promise<v
     await expect
       .poll(async () => (await windows()).find((w) => w.title === "Snow mini")?.visible)
       .toBe(true);
-    const pages = app.windows();
-    for (const p of pages) if ((await p.title()) === "Snow mini") return p;
-    throw new Error("mini page not found");
+    // The window can be visible before its page has loaded the title: wait for the page too.
+    let mini: Page | undefined;
+    await expect
+      .poll(async () => {
+        for (const p of app.windows()) if ((await p.title()) === "Snow mini") mini = p;
+        return mini !== undefined;
+      })
+      .toBe(true);
+    return mini as Page;
   };
   const ignoreCalls = () =>
     app.evaluate(() => (globalThis as unknown as { __ignoreCalls: unknown[][] }).__ignoreCalls);
