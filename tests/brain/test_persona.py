@@ -2,6 +2,7 @@
 
 import json
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -213,3 +214,12 @@ async def test_next_turn_sends_the_previous_exchange_without_headers(
         ("assistant", "Hello, sir."),
         ("user", "how are you"),
     ]
+
+
+def test_the_local_date_and_time_is_in_every_system_prompt(
+    persona: PersonaConfig,
+) -> None:
+    now = datetime(2026, 10, 24, 14, 5, tzinfo=UTC)
+    msgs = build_messages(persona, History(), "what time is it", None, [], now=now)
+    want = "Current local date and time: Saturday 24 October 2026, 02:05 PM UTC."
+    assert want in str(msgs[0]["content"])

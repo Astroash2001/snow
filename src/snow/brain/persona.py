@@ -6,6 +6,7 @@ written by the LLM (SPCH-01); nothing in this module is a spoken line.
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict
@@ -90,8 +91,11 @@ def build_messages(
     text: str,
     tone: Tone | None,
     facts: Sequence[Fact],
+    now: datetime | None = None,
 ) -> list[ChatCompletionMessageParam]:
-    system = persona.system_prompt
+    # The model has no clock: give it this PC's local time on every turn.
+    when = (now or datetime.now().astimezone()).strftime("%A %d %B %Y, %I:%M %p %Z")
+    system = f"{persona.system_prompt}\n\nCurrent local date and time: {when}."
     if facts:
         listed = "\n".join(f"- {f.text}" for f in facts)
         system += (
