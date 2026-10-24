@@ -60,6 +60,51 @@ outside the Snow data folder; the command refuses anything else.
 6. When the version finishes, download `output/hey_snow/hey_snow.onnx` and
    `hey_snow_eval.json` from the version's **Output** tab, then go to section 3.
 
+## 2c. Extra positives: the user's voice and more accents (second model, 2026-10-24)
+
+The first model, trained on Piper voices only, heard the user 33 of 50 times (12 of 17
+at arm's length, 3 of 16 from the doorway). An offline sweep with Snow's own gate put
+the gap on accent plus room echo: Kokoro's Hindi speakers fell to about 50 % at a
+direct-to-reverberant ratio of 0 dB while US and UK voices stayed above 80 %. The fix
+adds two sets of positives after `generate`, so `augment` gives them the same noise
+and room impulse responses as every other clip.
+
+1. On this PC, outside the repository (the script refuses a folder inside it):
+   - Record about 30 "Hey Snow" with two-second pauses, close to a phone is fine,
+     varying loudness and speed. Then
+     `uv run python training/wakeword/extra_positives.py split <recording> C:\SnowVoice\clips`
+     (needs `ffmpeg` on PATH).
+   - `uv run python training/wakeword/extra_positives.py accents C:\SnowVoice\kokoro 2400`
+     (about 15 minutes on the CPU; uses Snow's Kokoro files in `models/kokoro`).
+2. Zip the two folders with forward slashes in the names (Kaggle rejects the `\` that
+   Windows PowerShell's `Compress-Archive` writes) and upload the zip as a **private**
+   Kaggle dataset.
+3. In a notebook with that dataset as input, run the section 2 cells up to and
+   including `generate`, then this cell, then `augment`, `train`, `export`, `eval`:
+
+```python
+import glob, random, re, shutil
+from pathlib import Path
+
+out = Path("/kaggle/working/output/hey_snow")
+user = sorted(glob.glob("/kaggle/input/**/clips/user_*.wav", recursive=True))
+kok = sorted(glob.glob("/kaggle/input/**/kokoro/kokoro_*.wav", recursive=True))
+random.seed(0); random.shuffle(user); random.shuffle(kok)
+# the user's voice weighted x40 in training; 6 of their clips held out for the test split
+plan = {"positive_train": user[6:] * 40 + kok[240:],
+        "positive_test": user[:6] * 10 + kok[:240]}
+for split, files in plan.items():
+    d = out / split
+    nums = [int(m.group(1)) for p in d.glob("clip_*.wav")
+            if (m := re.match(r"clip_(\d{6})\.wav$", p.name))]
+    n = max(nums) + 1
+    for i, f in enumerate(files):
+        shutil.copy(f, d / f"clip_{n + i:06d}.wav")  # augment reads clip_NNNNNN.wav only
+```
+
+The voice recording is the user's own and goes only to their own private Kaggle
+dataset; delete the dataset when the model is accepted.
+
 ## 2b. In Colab (reference; same Python 3.13 runtime, apply the step 4 patch above)
 
 Keep the tab open: a disconnected runtime loses everything under `/content`.
