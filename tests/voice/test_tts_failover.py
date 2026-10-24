@@ -293,7 +293,7 @@ def test_the_pinned_kokoro_config_is_the_british_male_voice_with_two_checksums()
     None
 ):
     k = TTS_CFG.engines.kokoro
-    assert k.enabled and k.voice == "bm_george" and k.threads == 4
+    assert k.enabled and k.voice == "bm_daniel" and k.threads == 4
     assert k.model_url.startswith("https://github.com/thewh1teagle/kokoro-onnx/")
     assert len(k.model_sha256) == 64 and len(k.voices_sha256) == 64
 

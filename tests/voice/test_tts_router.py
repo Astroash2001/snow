@@ -11,13 +11,13 @@ from typing import Any
 import numpy as np
 import pytest
 
-from snow.config.settings import load_config
 from snow.contracts.events import HealthSubsystem, VoiceStatus, VoiceSwitch
 from snow.voice.tts.base import EngineLoadError, EngineName, Samples
 from snow.voice.tts.config import TtsConfig
 from snow.voice.tts.router import AllVoicesDown, VoiceRouter
+from tests.voice.conftest import tts_cfg
 
-CFG = load_config("tts.toml", TtsConfig)
+CFG = tts_cfg()
 RATE = 24000
 
 

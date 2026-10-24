@@ -44,10 +44,23 @@ HEY_SNOW = Path(__file__).resolve().parents[2] / "models" / "wakeword" / "hey_sn
 
 def voice_cfg() -> VoiceConfig:
     """voice.toml waking on the pretrained hey_jarvis stand-in: the fixtures say
-    "Hey Jarvis", and the trained hey_snow model is gitignored (CI never has it)."""
+    "Hey Jarvis", and the trained hey_snow model is gitignored (CI never has it).
+    The barge-in fixtures are timed for a 250 ms run; the live value is tuned on the
+    real mic (tests/hardware/test_echo_cancel.py reads it from voice.toml)."""
     cfg = load_config("voice.toml", VoiceConfig)
     wake = cfg.wake.model_copy(update={"model": "hey_jarvis", "model_sha256": ""})
-    return cfg.model_copy(update={"wake": wake})
+    turn = cfg.turn.model_copy(update={"barge_in_min_ms": 250})
+    return cfg.model_copy(update={"wake": wake, "turn": turn})
+
+
+def tts_cfg() -> TtsConfig:
+    """tts.toml with the full D-33 engine chain, which the routing tests cover; the
+    live order is the user's voice choice and may leave engines out."""
+    cfg = load_config("tts.toml", TtsConfig)
+    router = cfg.router.model_copy(
+        update={"order": ["cartesia", "chatterbox", "pocket_tts", "kokoro"]}
+    )
+    return cfg.model_copy(update={"router": router})
 
 
 CFG = voice_cfg()

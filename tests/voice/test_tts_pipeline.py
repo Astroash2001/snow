@@ -12,7 +12,6 @@ from typing import Any
 import numpy as np
 import pytest
 
-from snow.config.settings import load_config
 from snow.contracts.events import (
     AudioLevel,
     Event,
@@ -29,10 +28,10 @@ from snow.voice.playout import Playout
 from snow.voice.tts.base import EngineLoadError, Samples
 from snow.voice.tts.config import TtsConfig
 from snow.voice.tts.router import VoiceRouter
-from tests.voice.conftest import FakeHub, StubSource, make_pipeline, until
+from tests.voice.conftest import FakeHub, StubSource, make_pipeline, tts_cfg, until
 
 RATE = 24000
-TTS_CFG = load_config("tts.toml", TtsConfig)
+TTS_CFG = tts_cfg()
 
 
 class FakeEngine:
@@ -249,7 +248,9 @@ async def test_tts_levels_flow_only_while_speaking() -> None:
     assert order[:first] == [] and order[last + 1 :] == []
     levels = of(hub, AudioLevel)
     assert levels
-    assert all(e.channel == "tts" and 0.0 < e.level <= 1.0 for e in levels)
+    # A sentence pause is true silence (level 0.0) once reverb is off; speech is above it.
+    assert all(e.channel == "tts" and 0.0 <= e.level <= 1.0 for e in levels)
+    assert any(e.level > 0.0 for e in levels)
 
 
 async def test_an_empty_reply_stays_silent() -> None:

@@ -19,7 +19,6 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from snow.config.settings import load_config
 from snow.contracts.events import VoiceStatus, VoiceSwitch
 from snow.voice.tts import chatterbox as chatterbox_module
 from snow.voice.tts import router as router_module
@@ -31,11 +30,12 @@ from snow.voice.tts.chatterbox import (
     _read_frame,
     resolve_reference,
 )
-from snow.voice.tts.config import ChatterboxConfig, TtsConfig, VoiceClip
+from snow.voice.tts.config import ChatterboxConfig, VoiceClip
 from snow.voice.tts.router import VoiceRouter
+from tests.voice.conftest import tts_cfg
 from tests.voice.test_tts_router import Bus, FakeEngine, config, say
 
-CFG = load_config("tts.toml", TtsConfig)
+CFG = tts_cfg()
 
 STUB = """
 import json, struct, sys
