@@ -14,7 +14,7 @@ model_sha256 = "db2bc395d5e5676694ac258a8b258b2e087eb9d5ff47b3783d047f8d19be283b
 # model = "hey_jarvis"
 # 0.5, not the eval's optimal 0.21: the look-alike "hey so" peaks up to 0.75 on synthetic
 # voices. Recalibrate from tests/hardware/test_wake_fp.py on the real mic.
-threshold = 0.5
+threshold = 0.3   # was 0.5: recall on the user's voice was 33/50 (66 %) at three distances, 2026-10-24
 patience_frames = 2
 preroll_frames = 4   # 4 x 80 ms of RAM-only audio before the hit joins the turn (D-09)
 refractory_s = 1.5
