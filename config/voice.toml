@@ -9,7 +9,9 @@ frame_samples = 1280 # 80 ms; the frame size openWakeWord expects
 # The user's trained "hey snow" model (D-41, plan 01-30; recipe in training/wakeword).
 # The file is gitignored: when it is absent Snow reports wake_word down and stays deaf.
 model = "models/wakeword/hey_snow.onnx"
-model_sha256 = "db2bc395d5e5676694ac258a8b258b2e087eb9d5ff47b3783d047f8d19be283b"
+# v2 (2026-10-25): adds the user's voice and accent positives (training README 2c).
+# v1 is kept as models/wakeword/hey_snow_v1.onnx, sha256 db2bc395...283b.
+model_sha256 = "2da42e713d2814e05f8abddd2f79702347dd7e206440e18197a891224cea538a"
 # A/B baseline: the pretrained stand-in. Its weights are CC BY-NC-SA 4.0 (personal use only).
 # model = "hey_jarvis"
 # 0.5, not the eval's optimal 0.21: the look-alike "hey so" peaks up to 0.75 on synthetic
