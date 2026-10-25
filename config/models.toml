@@ -51,7 +51,9 @@ chain = [
 ]
 
 [roles.fast]
-ttft_timeout_s = 2.5
+# 4.0, was 2.5: on 2026-10-26 Groq and Experiential both missed 2.5 s three turns running and the
+# reply was held back (only untrusted providers left); deepseek-v4-flash measured 2.38 s when healthy.
+ttft_timeout_s = 4.0
 chain = [
   # probe 2026-10-17: stream yes, tools yes. Measured first token over 8 runs: p50 0.456 s, p95 0.886 s, so it serves first (D-30).
   { provider = "groq", model = "openai/gpt-oss-120b", params = { reasoning_effort = "low" } },
