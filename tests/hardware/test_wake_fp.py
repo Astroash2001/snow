@@ -9,8 +9,8 @@ False accepts per hour, with normal room noise and the TV on, for at least two h
     uv run pytest -m hardware tests/hardware/test_wake_fp.py -k false_accepts -s -q
 
 Recall: say "Hey Snow" when prompted, 50 times across three distances (arm's length,
-across the room, from the doorway). A short beep means "say it now". Target: at least
-90 %.
+across the room, from the doorway). A short beep means "say it now"; two low
+beeps mean "walk to the next spot" (15 s, nothing to press). Target: at least 90 %.
 
     uv run pytest -m hardware tests/hardware/test_wake_fp.py -k recall -s -q
 """
@@ -18,6 +18,7 @@ across the room, from the doorway). A short beep means "say it now". Target: at 
 import math
 import os
 import queue
+import time
 import winsound
 
 import numpy as np
@@ -32,6 +33,7 @@ pytestmark = pytest.mark.hardware
 
 CFG = load_config("voice.toml", VoiceConfig)
 DISTANCES = [("arm's length", 17), ("across the room", 17), ("from the doorway", 16)]
+_WALK_S = 15.0  # after two low beeps, time to reach the next spot
 _LISTEN_S = 4.0  # per recall prompt
 
 
@@ -105,7 +107,10 @@ def test_recall_on_the_users_voice() -> None:
     heard = total = 0
     try:
         for where, count in DISTANCES:
-            input(f'\nStand {where}, then press Enter. Say "Hey Snow" at each prompt.')
+            print(f'\nGo {where} now: {_WALK_S:g} s, then "Hey Snow" at each beep.')
+            for _ in range(2):
+                winsound.Beep(500, 250)  # "walk to the next spot"
+            time.sleep(_WALK_S)  # the queued audio is dropped before the first prompt
             for i in range(count):
                 g.reset()
                 winsound.Beep(1000, 150)  # "speak now" from far away; blocks until done
