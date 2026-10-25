@@ -3,12 +3,12 @@
 import numpy as np
 import pytest
 
-from snow.config.settings import load_config
-from snow.voice.config import ConversationConfig, VoiceConfig
+from snow.voice.config import ConversationConfig
 from snow.voice.turn import CHUNK, TurnEngine, mic_level
 from snow.voice.wake import WakeHit
+from tests.voice.conftest import voice_cfg
 
-CFG = load_config("voice.toml", VoiceConfig)
+CFG = voice_cfg()
 FRAME = np.zeros(1280, dtype=np.int16)  # 80 ms
 FRAMES_PER_S = 12.5
 

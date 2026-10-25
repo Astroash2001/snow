@@ -31,7 +31,7 @@ strip_patterns = [
 [turn]
 vad_threshold = 0.5
 start_secs = 0.2
-stop_secs = 0.2
+stop_secs = 0.7  # was 0.2: a complete-sounding phrase ("Tell me one thing.") ended the turn in a mid-thought pause (UAT 2026-10-26)
 max_silence_secs = 3.0
 max_turn_secs = 30
 wake_alone_window_s = 1.0

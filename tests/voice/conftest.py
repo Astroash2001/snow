@@ -45,11 +45,11 @@ HEY_SNOW = Path(__file__).resolve().parents[2] / "models" / "wakeword" / "hey_sn
 def voice_cfg() -> VoiceConfig:
     """voice.toml waking on the pretrained hey_jarvis stand-in: the fixtures say
     "Hey Jarvis", and the trained hey_snow model is gitignored (CI never has it).
-    The barge-in fixtures are timed for a 250 ms run; the live value is tuned on the
-    real mic (tests/hardware/test_echo_cancel.py reads it from voice.toml)."""
+    The barge-in and turn-end fixtures are timed for a 250 ms run and a 0.2 s stop;
+    the live values are tuned on the real mic (voice.toml)."""
     cfg = load_config("voice.toml", VoiceConfig)
     wake = cfg.wake.model_copy(update={"model": "hey_jarvis", "model_sha256": ""})
-    turn = cfg.turn.model_copy(update={"barge_in_min_ms": 250})
+    turn = cfg.turn.model_copy(update={"barge_in_min_ms": 250, "stop_secs": 0.2})
     return cfg.model_copy(update={"wake": wake, "turn": turn})
 
 
