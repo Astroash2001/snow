@@ -5,12 +5,14 @@ phrase opened. Failures become `SttUnavailable` so a router can fall back to loc
 
 The request asks for `verbose_json` so each segment carries Whisper's own confidence
 (`no_speech_prob`, `avg_logprob`), at temperature 0 and with the vocabulary prompt from
-voice.toml. A turn whose every segment looks silent returns "" and so gets no reply;
-only numbers are logged, never the transcript (D-18).
+voice.toml. A turn whose every segment looks silent returns "" and so gets no reply,
+and so does one made only of prompt words: on short or unclear audio Whisper can echo
+its prompt back as the transcript. Only numbers are logged, never the transcript (D-18).
 """
 
 import io
 import logging
+import re
 import wave
 from collections.abc import Callable
 from typing import Literal
@@ -46,6 +48,10 @@ def wav_bytes(pcm: bytes, sample_rate: int) -> io.BytesIO:
         w.writeframes(pcm)
     buffer.seek(0)
     return buffer
+
+
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9']+", text.lower()))
 
 
 def _retry_after(response: httpx2.Response) -> float | None:
@@ -104,6 +110,10 @@ class GroqStt:
             raise SttUnavailable("unreachable") from e
         finally:
             await client.close()
+        words = _words(result.text)
+        if self._cfg.prompt and words and words <= _words(self._cfg.prompt):
+            log.info("groq_stt prompt_echo=True dropped")
+            return ""
         segs = result.segments or []
         if not segs:  # fail open: no confidence data means trust the text
             return result.text

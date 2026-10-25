@@ -75,6 +75,26 @@ async def test_every_segment_silent_looking_is_dropped() -> None:
     assert await answer((0.95, -2.0), (NSP, ALP)).transcribe(PCM) == ""
 
 
+async def test_a_transcript_made_only_of_prompt_words_is_dropped() -> None:
+    prompt = "Hey Snow. Claude Code, Antigravity, OpenCode."
+    cfg = CFG.model_copy(update={"prompt": prompt})
+
+    def heard(text: str) -> GroqStt:
+        body = {
+            "text": text,
+            "language": "en",
+            "duration": 1.0,
+            "segments": [verbose_segment(text, 0.0, -0.3)],
+        }
+        mock = httpx2.MockTransport(lambda _r: httpx2.Response(200, json=body))
+        return GroqStt(cfg, lambda _n: Secret("gsk_test"), mock)
+
+    assert await heard(" Claude Code, Antigravity, OpenCode.").transcribe(PCM) == ""
+    assert await heard("Hey snow.").transcribe(PCM) == ""
+    kept = " Open Claude Code in the snow project."
+    assert await heard(kept).transcribe(PCM) == kept  # one word outside the prompt
+
+
 async def test_no_segments_fails_open() -> None:
     assert await answer().transcribe(PCM) == "thank you"
 

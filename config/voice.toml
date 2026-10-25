@@ -67,7 +67,9 @@ language = "en"
 timeout_s = 8
 # Whisper spelling hints (up to 224 tokens). "Hey Snow" helps the wake-phrase strip
 # patterns catch the wake word; change it together with the wake word.
-prompt = "Hey Snow. Claude Code, Antigravity, OpenCode."
+# Agent names (Claude Code, Antigravity, OpenCode) come back in Phase 2: Whisper echoed
+# them as a transcript the user never said (UAT G-01-15). A pure echo is dropped anyway.
+prompt = "Hey Snow."
 # A turn is dropped (no transcript, no reply) when every segment has no_speech_prob at or
 # above the first and avg_logprob at or below the second: Whisper's own silence rule. The
 # gap study suggested the tighter 0.4 / -0.5; this is the safer start because the mic sits
