@@ -8,12 +8,11 @@ updated: 2026-10-25T10:40:00Z
 
 ## Current Test
 
-number: 2
-name: Wake and ask in one breath
+number: 4
+name: Live words while speaking
 expected: |
-  Say "Hey Snow, what is the capital of France?" without pausing. Your words appear as
-  a You row (without "Hey Snow"), Snow answers in text and speaks it in the bm_daniel
-  voice, and the orb changes colour while it listens, thinks and speaks.
+  While you say a long sentence slowly, a live row fills in with your words as you
+  talk, then settles into the final line when you stop.
 awaiting: user response
 
 ## Tests
@@ -25,15 +24,19 @@ note: First run failed to wake: Windows mic "Audio enhancements" had been set to
 
 ### 2. Wake and ask in one breath
 expected: Say "Hey Snow, what is the capital of France?" without pausing. Your words appear as a You row (without "Hey Snow"), Snow answers in text and speaks it in the bm_daniel voice, and the orb changes colour while it listens, thinks and speaks.
-result: [pending]
+result: pass
 
 ### 3. Conversation stays open, then ends
 expected: Right after Snow answers, ask a follow-up with no wake word and a short pause in the middle of the sentence. Snow treats it as one question and answers. Then say "that's all": Snow goes back to sleep and only "Hey Snow" wakes it again.
-result: [pending]
+result: pass
+note: Three follow-ups without a wake word answered (01:14 session); the user ended with the HUD Mute button, so "that's all" moved into test 7.
 
 ### 4. Live words while speaking
 expected: While you say a long sentence slowly, a live row in the dashboard fills in with your words as you talk, then settles into the final line when you stop.
-result: [pending]
+result: issue
+reported: "no it stopped hearing mid way and started giving answer"
+severity: major
+fix_note: "Turn ended after 0.2 s of silence on the complete-sounding 'Tell me one thing.'; stop_secs raised to 0.7 in ae94081. Re-test pending; the live row itself was not observed."
 
 ### 5. Interrupting Snow
 expected: Ask "Hey Snow, tell me a long story about space." While Snow is speaking, talk over it for about a second. Snow stops at once, the cut-off reply is dimmed with an Interrupted chip, and Snow answers what you said instead.
@@ -44,7 +47,7 @@ expected: Say "Hey Snow, mute". The Windows microphone indicator turns off, a Mu
 result: [pending]
 
 ### 7. Go to sleep
-expected: Say "Hey Snow, go to sleep". Snow stops listening for follow-ups (orb in its sleeping state) but still wakes on "Hey Snow".
+expected: Say "that's all" in a conversation: Snow ends it. Then say "Hey Snow, go to sleep". Snow stops listening for follow-ups (orb in its sleeping state) but still wakes on "Hey Snow".
 result: [pending]
 
 ### 8. Tray, tooltip and mini orb
@@ -85,12 +88,18 @@ result: issue
 reported: "Sometimes it identifies my words as wrong: the clear words that I am not saying."
 severity: major
 
+### 16. A slow provider does not silence Snow
+expected: When the first fast provider is slow, Snow still answers from the next trusted one.
+result: issue
+reported: "Screenshot 2026-10-26: 'Request held back: only providers not cleared for private data were available.' Fast role cooling down."
+severity: major
+
 ## Summary
 
-total: 15
-passed: 2
-issues: 1
-pending: 10
+total: 16
+passed: 4
+issues: 3
+pending: 7
 skipped: 2
 
 ## Gaps
@@ -112,3 +121,34 @@ skipped: 2
     - "Speaker verification so Snow's own voice and other people never become user turns (Phase 2, already planned)"
   debug_session: ""
   fix_note: "Cause 1 fixed inline in b004a83 (prompt-echo drop, prompt trimmed to Hey Snow). Cause 2 is speaker verification, the first build step of Phase 2."
+
+- gap_id: G-01-16
+  truth: "A slow provider does not silence Snow"
+  status: failed
+  reason: "User reported (screenshot): Request held back: only providers not cleared for private data were available."
+  severity: major
+  test: 16
+  root_cause: "01:17-01:19: groq gpt-oss-120b and experiential deepseek-v4-flash each missed the 2.5 s first-token deadline three turns running (a transient slowdown; re-measured at 1.25 s and 2.38 s). The timeout cooled down the whole Groq provider, so groq qwen3.8-27b was never tried, and the last entry is untrusted, so the privacy gate held the request back."
+  artifacts:
+    - path: "config/models.toml"
+      issue: "fast ttft_timeout_s 2.5 is under healthy deepseek-v4-flash's margin"
+    - path: "src/snow/brain/"
+      issue: "a model timeout cools down the provider, skipping its other models"
+  missing:
+    - "Cooldown per model, not per provider, for timeouts"
+  debug_session: ""
+  fix_note: "ttft_timeout_s raised to 4.0 inline (fix(brain) commit after 4a73960). Per-model cooldown left for a gap plan."
+
+- gap_id: G-01-4
+  truth: "A mid-thought pause does not end the user's turn"
+  status: failed
+  reason: "User reported: no it stopped hearing mid way and started giving answer"
+  severity: major
+  test: 4
+  root_cause: "TurnEngine asks Smart Turn after stop_secs (0.2 s) of silence; 'Tell me one thing.' is a complete sentence, so a normal pause ended the turn."
+  artifacts:
+    - path: "config/voice.toml"
+      issue: "[turn] stop_secs 0.2 is shorter than the user's mid-thought pauses"
+  missing: []
+  debug_session: ""
+  fix_note: "stop_secs 0.7 inline (ae94081); costs about 0.5 s per reply. Needs the user's re-test."
