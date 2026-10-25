@@ -3,7 +3,7 @@ phase: 01-always-on-voice-loop
 plan: 10
 subsystem: ci
 tags: [ci, github-actions, gitleaks, pip-audit, npm-audit, pre-push, quality-gate]
-status: partial
+status: complete
 
 requires:
   - phase: 01-always-on-voice-loop/01-06
@@ -55,11 +55,14 @@ metrics:
 
 # Phase 1 Plan 10: CI and local quality gate Summary
 
-Windows CI workflow (python, hud, security jobs, every action SHA-pinned, read-only token), Snow-specific gitleaks rules, and a pre-push hook that runs the shared `scripts/check.sh`. Local parts only: no remote, push or CI run yet (user approval pending).
+Windows CI workflow (python, hud, security jobs, every action SHA-pinned, read-only token), Snow-specific gitleaks rules, and a pre-push hook that runs the shared `scripts/check.sh`. Pushed to the private repo Astroash2001/snow on the user's "yes push" (2026-10-25); CI green.
 
-## Status: partial
+## Status: complete (2026-10-25)
 
-Done locally: Task 1 step 2 (the workflow) and all of Task 2. Pending the user's approval of outward-facing actions: Task 1 step 1 (create the private repo and the `origin` remote, push `main`), the first green CI run, and the throwaway-branch human check.
+- `origin` is https://github.com/Astroash2001/snow (PRIVATE, verified with `gh repo view`); `core.hooksPath` is `.githooks`.
+- First pushes found pre-existing CI failures, fixed before green: pip-audit flagged pillow, certifi, filelock and setuptools (52465a9: fixed releases let past the exclude-newer cutoff, Pillow 13 overrides pipecat-ai 1.12.0's <13 cap), and two HUD e2e races on the slower runner (52465a9, 65cd78f, 690c6b5).
+- First green run: 40129871671 on 690c6b5 (python, hud, security).
+- Human check, shown by real events instead of a throwaway branch: the pre-push hook refused a push on a ruff E501 failure, and runs 40125671072 and 40128969087 went red on main with the failures above.
 
 ## Pinned actions
 
