@@ -22,6 +22,7 @@ from tests.brain.conftest import (
     Events,
     FakeClock,
     Routes,
+    hang_route,
     host_of,
     sse_route,
 )
@@ -53,6 +54,13 @@ def limiter(clock: Clock) -> RateLimiter:
     return RateLimiter(clock, CooldownDefaults())
 
 
+def two_groq() -> ModelsConfig:
+    """Fast chain with two groq models, as in the shipped models.toml."""
+    cfg = copy.deepcopy(MODELS)
+    cfg["roles"]["fast"]["chain"].insert(1, {"provider": "groq", "model": "groq-2"})
+    return ModelsConfig.model_validate(cfg)
+
+
 def cooldown_s(
     limiter: RateLimiter,
     clock: Clock,
@@ -60,7 +68,7 @@ def cooldown_s(
     headers: Mapping[str, str] | None = None,
     body: object = None,
 ) -> float | None:
-    until = limiter.record_failure("p", reason, headers or {}, body)
+    until = limiter.record_failure("p", ENTRY, reason, headers or {}, body)
     return None if until is None else (until - clock.t).total_seconds()
 
 
@@ -155,12 +163,12 @@ def test_unknown_signals_use_defaults(limiter: RateLimiter, clock: Clock) -> Non
 def test_config_error_is_not_a_provider_wide_cooldown(
     limiter: RateLimiter,
 ) -> None:
-    assert limiter.record_failure("p", "config_error", {}, None) is None
+    assert limiter.record_failure("p", ENTRY, "config_error", {}, None) is None
     assert limiter.cooling_until("p", ENTRY) is None
 
 
 def test_cooldown_ends_exactly_when_asked(limiter: RateLimiter, clock: Clock) -> None:
-    limiter.record_failure("groq", "rate_limit", {"retry-after": "12"}, None)
+    limiter.record_failure("groq", ENTRY, "rate_limit", {"retry-after": "12"}, None)
     assert limiter.cooling_until("groq", ENTRY) is not None
     clock.advance(11.9)
     assert limiter.cooling_until("groq", ENTRY) is not None
@@ -285,24 +293,55 @@ async def test_cooling_provider_is_skipped_then_returns(
     sse_route(routes, groq, ["back"])
     third = await chain.stream(MSG)
     assert (third.provider, await text_of(third)) == ("groq", "back")
-    # A 429 on groq's first entry also spared its second entry in the first call.
+    # groq was asked twice in all: the 429, then the reply after the cooldown.
     assert routes.count(groq) == 2
     rows = [e for e in events.of("health.provider") if e.provider == "groq"]
     assert any(r.status == "cooling_down" and r.cooling_until_ns for r in rows)
     assert rows[-1].status != "cooling_down"
 
 
+async def test_timeout_cools_only_that_model(
+    make: Callable[..., LLMChain],
+    models_cfg: ModelsConfig,
+    routes: Routes,
+    events: Events,
+    clock: Clock,
+) -> None:
+    """G-01-16: a slow model must not silence the provider's other models."""
+    groq = host_of(models_cfg, "groq")
+    chain = make("fast", two_groq())
+    hang_route(routes, groq)
+    sse_route(routes, groq, ["via qwen"])
+    first = await chain.stream(MSG)
+    assert (first.provider, first.model) == ("groq", "groq-2")
+    assert await text_of(first) == "via qwen"
+    assert routes.count(groq) == 2
+    role = events.of("health.role")[-1]
+    assert role.status == "fallback"
+    assert role.entries[0].status == "cooling_down"
+    assert role.entries[0].cooling_until_ns
+    assert role.entries[0].detail == "timeout"
+    assert role.entries[1].status == "active"
+    rows = [e for e in events.of("health.provider") if e.provider == "groq"]
+    assert not any(r.status == "cooling_down" for r in rows)
+    # Next turn: groq-1 is still cooling, so groq-2 serves without a hung call.
+    sse_route(routes, groq, ["again"])
+    second = await chain.stream(MSG)
+    assert second.model == "groq-2"
+    await text_of(second)
+    # After the cooldown groq-1 is tried again.
+    clock.advance(20.1)
+    sse_route(routes, groq, ["back"])
+    assert (await chain.stream(MSG)).model == "groq-1"
+
+
 async def test_bad_key_costs_one_call_not_two(
     make: Callable[..., LLMChain], models_cfg: ModelsConfig, routes: Routes
 ) -> None:
-    cfg = copy.deepcopy(MODELS)
-    cfg["roles"]["fast"]["chain"].insert(
-        1, {"provider": "groq", "model": "groq-2"}
-    )  # two groq entries, as in the shipped models.toml
     groq, exp = host_of(models_cfg, "groq"), host_of(models_cfg, "experiential")
     routes.add(groq, limited(401, {}))
     sse_route(routes, exp, ["ok"])
-    stream = await make("fast", ModelsConfig.model_validate(cfg)).stream(MSG)
+    stream = await make("fast", two_groq()).stream(MSG)
     assert stream.provider == "experiential"
     assert routes.count(groq) == 1
 
@@ -327,16 +366,23 @@ async def test_cooling_trusted_provider_never_promotes_untrusted(
     assert events.of("llm.blocked_privacy") == []
 
 
+@pytest.mark.parametrize("reason", ["rate_limit", "timeout"])
 async def test_only_untrusted_left_fails_closed_while_cooling(
     make: Callable[..., LLMChain],
     models_cfg: ModelsConfig,
     routes: Routes,
     limiter: RateLimiter,
+    reason: str,
 ) -> None:
     from snow.brain.chain import PrivacyBlockedError
 
-    for p in ("experiential", "nvidia"):
-        limiter.record_failure(p, "rate_limit", {"retry-after": "60"}, None)
+    for entry in (
+        ChainEntry(provider="experiential", model="luna"),
+        ChainEntry(provider="nvidia", model="nim-1"),
+    ):
+        limiter.record_failure(
+            entry.provider, entry, reason, {"retry-after": "60"}, None
+        )
     with pytest.raises(PrivacyBlockedError):
         await make("brain").stream(MSG)
     assert routes.total == 0
@@ -346,7 +392,7 @@ async def test_all_cooling_is_exhausted_not_hammered(
     make: Callable[..., LLMChain], routes: Routes, events: Events, limiter: RateLimiter
 ) -> None:
     for p in ("experiential", "groq", "google", "nvidia", "openrouter"):
-        limiter.record_failure(p, "rate_limit", {"retry-after": "60"}, None)
+        limiter.record_failure(p, ENTRY, "rate_limit", {"retry-after": "60"}, None)
     with pytest.raises(AllProvidersFailed):
         await make("fast").stream(MSG, data_class="general")
     assert routes.total == 0

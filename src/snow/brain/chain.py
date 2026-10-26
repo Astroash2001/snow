@@ -308,15 +308,22 @@ class LLMChain:
     def _record_failure(
         self, entry: ChainEntry, reason: SwitchReason, exc: BaseException
     ) -> tuple[ProviderStatus, str | None]:
-        """Start the provider's cooldown from the error's headers and body (CORE-09)."""
+        """Start a cooldown from the error's headers and body (CORE-09).
+
+        The provider row cools only when the whole provider does; a timeout or 5xx
+        cools just this entry's model.
+        """
         if self._limiter is None:
             return "failing", reason
         headers: Mapping[str, str] = {}
         body: object = None
         if isinstance(exc, APIStatusError):
             headers, body = exc.response.headers, exc.body
-        until = self._limiter.record_failure(entry.provider, reason, headers, body)
-        return ("cooling_down" if until else "failing"), reason
+        self._limiter.record_failure(entry.provider, entry, reason, headers, body)
+        # A provider already cooling was skipped before this call, so a live
+        # provider cooldown here was started by this failure.
+        cooling = self._limiter.snapshot(entry.provider)[2] is not None
+        return ("cooling_down" if cooling else "failing"), reason
 
     def _client(self, name: str, provider: Provider, secret: Secret) -> AsyncOpenAI:
         cached = self._clients.get(name)
