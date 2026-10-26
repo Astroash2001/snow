@@ -72,6 +72,9 @@ class Log:
     def on_level(self, level: float) -> None:
         self.calls.append(("level", level))
 
+    def on_barge_in(self) -> None:
+        self.calls.append(("barge_in", None))
+
 
 def make(
     vad: Vad | None = None, silence: float = 45.0, reply: float = 20.0
@@ -207,3 +210,34 @@ def test_mic_levels_only_while_listening_and_at_most_32_per_second() -> None:
 def test_mic_level_scale(amplitude: int, lo: float, hi: float) -> None:
     chunk = np.full(CHUNK, amplitude, dtype=np.int16)
     assert lo <= mic_level(chunk) <= hi
+
+
+def quiet(engine: TurnEngine, chunks: int = 1) -> None:
+    for _ in range(chunks):
+        engine.feed(np.zeros(CHUNK, dtype=np.int16))
+
+
+def test_the_wake_phrase_while_snow_speaks_cuts_it_and_listens() -> None:
+    engine, vad, log = make()
+    wake(engine)
+    speak(engine, vad)  # the turn ended: a reply is pending
+    engine.set_speaking(True)
+    quiet(engine)  # the inbox drains
+    log.calls.clear()
+    wake(engine)
+    assert [c for c in log.calls if c[0] != "level"] == [
+        ("barge_in", None),
+        ("presence", "listening"),
+        ("wake", None),
+    ]
+    feed_s(engine, 1.5)
+    assert log.count("wake_alone") == 1  # a fresh wake turn was opened
+
+
+def test_the_wake_phrase_while_thinking_is_still_ignored() -> None:
+    engine, vad, log = make()
+    wake(engine)
+    speak(engine, vad)  # a reply is pending, Snow is not audible yet
+    wake(engine)
+    assert log.count("wake") == 1
+    assert log.count("barge_in") == 0

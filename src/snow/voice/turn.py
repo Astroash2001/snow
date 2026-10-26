@@ -161,7 +161,8 @@ class TurnEngine:
     def set_speaking(self, speaking: bool) -> None:
         """Thread-safe: Snow's voice is audible (True) or has stopped (False). While it
         is, the user speaking for `barge_in_min_ms` (`barge_in_warmup_min_ms` while
-        the echo canceller is still adapting) interrupts it (VOIC-06)."""
+        the echo canceller is still adapting) interrupts it (VOIC-06), and so does
+        the wake phrase."""
         self._inbox.append(("speaking", "1" if speaking else ""))
 
     def mute(self) -> None:
@@ -215,8 +216,14 @@ class TurnEngine:
 
     def on_wake(self, hit: WakeHit) -> None:
         self.drain()
+        if self.state is State.MUTED:
+            return
+        if self._speaking_out and (self._turn is None or not self._turn.speaking):
+            # the wake phrase is the interrupt (Alexa rule): stop now, then listen
+            self._cut()
+            self._close_turn()
         # A wake inside a turn is the user's own words, not a new conversation.
-        if self.state is State.MUTED or self._turn is not None or self._waiting:
+        if self._turn is not None or self._waiting:
             return
         self.events.on_wake(hit)
         if self.state is State.SLEEPING:
@@ -284,23 +291,27 @@ class TurnEngine:
         ms = cfg.barge_in_warmup_min_ms if self.echo_warming() else cfg.barge_in_min_ms
         return self._samples(ms / 1000)
 
-    def _barge_in(self) -> None:
-        """Stop waiting and open the next turn on the audio that barged in."""
-        seed = list(self._ring)
+    def _cut(self) -> None:
+        """Snow's voice is cut off: stop waiting, drop the barge-in state, tell the pipeline."""
         self._ring.clear()
         self._speaking_out = False
         self._barge_run = 0
         self._waiting = False
         self._idle = 0
         self._eot.clear()
+        self.events.on_barge_in()  # before any new turn starts: the old reply is cut first
+        self.events.on_presence("listening")
+
+    def _barge_in(self) -> None:
+        """Stop waiting and open the next turn on the audio that barged in."""
+        seed = list(self._ring)
+        self._cut()
         t = _Turn(id=uuid.uuid4().hex[:12], boundary=0, follow_on=True)
         t.chunks, t.samples, t.speaking = seed, len(seed) * CHUNK, True
         t.last_speech_end = t.samples
         self._turn = t
         for kept in seed:
             self._eot.append(kept)
-        self.events.on_barge_in()  # before the turn starts: the old reply is cut first
-        self.events.on_presence("listening")
         self.events.on_turn_start(t.id)
 
     def _chunk(self, chunk: Pcm) -> None:
