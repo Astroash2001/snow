@@ -353,3 +353,27 @@ async def test_the_wake_phrase_over_snow_stops_it_at_once_and_listens(
     rig.hear(500, speech=False)
     await until(lambda: len(of(rig.hub, TranscriptFinal)) == 2)
     assert of(rig.hub, TranscriptFinal)[1].turn_id != turn_id
+
+
+async def test_speech_over_snow_ducks_it_and_an_unconfirmed_noise_gives_it_back(
+    groq: FakeGroq,
+) -> None:
+    rig = await make_rig(groq, HoldEngine(hold_from=2))
+    turn_id = await ask(rig)
+    await start_reply(rig, turn_id, blocks=10)
+    assert rig.turn.duck == rig.pipeline._playout.set_gain  # noqa: SLF001
+
+    gains: list[float] = []
+    real = rig.turn.duck
+
+    def spy(gain: float) -> None:
+        gains.append(gain)
+        real(gain)
+
+    rig.turn.duck = spy
+    rig.hear(192, speech=True)
+    assert gains == [0.25]
+    rig.hear(900, speech=False)
+    assert gains == [0.25, 1.0]
+    assert rig.aborts == []
+    assert rig.pipeline._reply is not None  # noqa: SLF001

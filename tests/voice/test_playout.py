@@ -195,3 +195,52 @@ def test_device_rate_is_the_wasapi_default_outputs_own_rate(
     monkeypatch.setattr(sd, "query_hostapis", lambda: wasapi)
     monkeypatch.setattr(sd, "query_devices", broken)
     assert device_rate() is None
+
+
+def test_a_duck_ramps_down_within_30_ms_and_the_echo_reference_matches() -> None:
+    playout, stream, rendered = rig()
+    playout.push(tone(RATE))
+    assert block_of(stream)[0] == pytest.approx(0.5)
+    playout.set_gain(0.25)
+    ducking = block_of(stream)
+    assert ducking[0] < 0.5
+    assert (np.diff(ducking) <= 1e-7).all()
+    assert np.array_equal(rendered[-1], ducking)
+    assert ducking[BLOCK // 2 - 1] > 0.125  # still ramping 10 ms in
+    settled = block_of(stream)
+    assert settled[BLOCK // 2] == pytest.approx(0.125)  # 30 ms after the duck
+    third = block_of(stream)
+    assert third == pytest.approx(np.full(BLOCK, 0.125), abs=1e-6)
+    assert np.array_equal(rendered[-1], third)
+
+
+def test_releasing_the_duck_rises_back_to_full_level_within_30_ms() -> None:
+    playout, stream, _ = rig()
+    playout.push(tone(RATE))
+    playout.set_gain(0.25)
+    for _ in range(3):
+        block_of(stream)
+    playout.set_gain(1.0)
+    up = block_of(stream)
+    assert (np.diff(up) >= -1e-7).all()
+    assert block_of(stream)[BLOCK // 2] == pytest.approx(0.5)
+
+
+def test_abort_and_a_drained_utterance_reset_the_gain() -> None:
+    playout, stream, _ = rig()
+    playout.push(tone(RATE))
+    playout.set_gain(0.25)
+    for _ in range(3):
+        block_of(stream)
+    playout.abort()
+    playout.start_utterance()
+    playout.push(tone(PREBUFFER + 10))
+    assert block_of(stream)[0] == pytest.approx(0.5)
+
+    playout.set_gain(0.25)
+    playout.end_utterance()
+    for _ in range(PREBUFFER // BLOCK + 3):  # play out and drain
+        block_of(stream)
+    playout.start_utterance()
+    playout.push(tone(PREBUFFER + 10))
+    assert block_of(stream)[0] == pytest.approx(0.5)

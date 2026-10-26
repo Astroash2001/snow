@@ -34,10 +34,12 @@ class TurnConfig(_Strict):
     wake_alone_window_s: float
     barge_in_min_ms: int
     barge_in_warmup_min_ms: int  # while the echo canceller is still adapting
-    barge_gap_ms: int  # a quiet stretch up to this long inside the user's words does not break a barge-in run
+    # a quiet stretch up to this long inside the user's words keeps a barge-in run
+    barge_gap_ms: int
     duck_after_ms: int  # this much speech over Snow lowers its voice
     duck_gain: float  # Snow's playout gain while ducked
-    duck_release_s: float  # an unconfirmed barge-in releases the duck this long after its first speech
+    # an unconfirmed barge-in releases the duck this long after its first speech
+    duck_release_s: float
 
     @model_validator(mode="after")
     def _duck_is_sane(self) -> Self:

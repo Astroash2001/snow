@@ -324,14 +324,14 @@ class TurnEngine:
         return self._samples(ms / 1000)
 
     def _cut(self) -> None:
-        """Snow's voice is cut off: stop waiting, drop the barge-in state, tell the pipeline."""
+        """Snow is cut off: stop waiting, drop barge-in state, tell the pipeline."""
         self._ring.clear()
         self._speaking_out = False
         self._reset_barge()
         self._waiting = False
         self._idle = 0
         self._eot.clear()
-        self.events.on_barge_in()  # before any new turn starts: the old reply is cut first
+        self.events.on_barge_in()  # before any new turn: the old reply is cut first
         self.events.on_presence("listening")
 
     def _barge_in(self) -> None:
