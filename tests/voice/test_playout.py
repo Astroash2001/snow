@@ -244,3 +244,89 @@ def test_abort_and_a_drained_utterance_reset_the_gain() -> None:
     playout.start_utterance()
     playout.push(tone(PREBUFFER + 10))
     assert block_of(stream)[0] == pytest.approx(0.5)
+
+
+def ramp_signal(samples: int) -> np.ndarray:
+    """1, 2, 3 ... scaled small: every sample is unique, so a resume position shows."""
+    return (np.arange(1, samples + 1, dtype=np.float32)) / 1_000_000
+
+
+def test_a_pause_ramps_to_silence_in_30_ms_then_holds_every_sample() -> None:
+    playout, stream, rendered = rig()
+    playout.push(tone(RATE))
+    assert block_of(stream)[0] == pytest.approx(0.5)
+    playout.set_paused(True)
+    ramping = block_of(stream)
+    assert ramping[0] < 0.5
+    assert (np.diff(ramping) <= 1e-7).all()
+    assert np.array_equal(rendered[-1], ramping)
+    for _ in range(2):  # 30 ms is done by the second block after the pause
+        block_of(stream)
+    played, buffered = playout.played, playout._buffered  # noqa: SLF001
+    for _ in range(5):
+        held = block_of(stream)
+        assert not held.any()
+        assert np.array_equal(rendered[-1], held)  # the echo reference is silence too
+    assert (playout.played, playout._buffered) == (played, buffered)  # noqa: SLF001
+
+
+def test_a_paused_utterance_never_drains_or_underruns() -> None:
+    for queued in (0, 5000):
+        playout, stream, _ = rig()
+        drained: list[int] = []
+        playout.on_drained = lambda d=drained: d.append(1)
+        playout.push(tone(PREBUFFER + 10))
+        for _ in range(3):
+            block_of(stream)
+        playout.set_paused(True)
+        for _ in range(3):
+            block_of(stream)
+        if queued == 0:
+            playout._chunks.clear()  # noqa: SLF001
+            playout._buffered = 0  # noqa: SLF001
+        playout.end_utterance()
+        for _ in range(10):
+            block_of(stream)
+        assert drained == []
+        assert playout.underruns == 0
+
+
+def test_resuming_continues_from_the_first_unplayed_sample_and_then_drains() -> None:
+    playout, stream, _ = rig()
+    drained: list[int] = []
+    playout.on_drained = lambda: drained.append(1)
+    signal = ramp_signal(PREBUFFER + 5000)
+    playout.push(signal)
+    playout.end_utterance()
+    block_of(stream)
+    playout.set_paused(True)
+    for _ in range(4):
+        block_of(stream)
+    held_at = playout.played  # the first sample that has not played
+    playout.set_paused(False)
+    up = block_of(stream)
+    step = 1.0 / (RATE * 0.03)
+    rising = signal[held_at : held_at + BLOCK] * (np.arange(1, BLOCK + 1) * step)
+    assert up == pytest.approx(rising, rel=1e-4)  # the held sample, ramping up
+    full = block_of(stream)
+    assert full[BLOCK // 2] == pytest.approx(signal[held_at + BLOCK + BLOCK // 2])
+    while not drained:
+        block_of(stream)
+    assert drained == [1]
+
+
+def test_abort_and_a_new_utterance_clear_a_pause() -> None:
+    playout, stream, _ = rig()
+    playout.push(tone(PREBUFFER + 10))
+    playout.set_paused(True)
+    for _ in range(3):
+        block_of(stream)
+    playout.abort()
+    playout.start_utterance()
+    playout.push(tone(PREBUFFER + 10))
+    assert block_of(stream)[0] == pytest.approx(0.5)
+
+    playout.set_paused(True)
+    playout.start_utterance()
+    playout.push(tone(PREBUFFER + 10))
+    assert block_of(stream)[0] == pytest.approx(0.5)

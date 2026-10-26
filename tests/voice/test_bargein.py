@@ -1,15 +1,18 @@
-"""Barge-in (VOIC-06): talking over Snow stops it, and the interrupting words are heard.
+"""Barge-in (VOIC-06): talking over Snow pauses it, a check of the words decides, an
+accepted one stops it and the interrupting words are heard, a rejected one resumes it.
 
 Fake microphone (scripted VAD fed 512-sample chunks), fake speaker, fake voice engine:
 no real audio device is opened and nothing is played or written.
 """
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import httpx2
 import numpy as np
+import pytest
 
 from snow.config.secrets import Secret
 from snow.contracts.events import (
@@ -28,6 +31,7 @@ from tests.voice.conftest import (
     CFG,
     FakeGroq,
     FakeHub,
+    FakeLocalStt,
     StubSource,
     tts_cfg_polish_off,
     until,
@@ -41,6 +45,7 @@ from tests.voice.test_tts_pipeline import (
     delta,
     final,
     of,
+    play_out,
 )
 
 SPEECH = 1000  # the value of every speech sample, so the turn audio can be inspected
@@ -101,6 +106,7 @@ class Rig:
     speaker: Speaker
     vad: Vad
     turn: TurnEngine
+    local: FakeLocalStt
     mic: int = 0  # microphone samples fed so far
     aborts: list[int] = field(default_factory=list[int])  # `mic` at each speaker abort
     turn_pcm: list[bytes] = field(default_factory=list[bytes])
@@ -147,6 +153,7 @@ async def make_rig(
         lambda _n: Secret("gsk_test_key_not_real"),
         transport=httpx2.MockTransport(groq.handler),
     )
+    local = FakeLocalStt()
     pipeline = VoicePipeline(
         CFG,
         hub,
@@ -155,6 +162,7 @@ async def make_rig(
         turn,
         stt,
         "voice",
+        local=local,
         echo_cancel=echo_cancel,
     )
     pipeline._tone.analyze = lambda *a: None  # type: ignore[method-assign,assignment]  # noqa: SLF001
@@ -165,7 +173,7 @@ async def make_rig(
     pipeline._tts = VoiceRouter({"pocket_tts": voice}, cfg, pipeline._emit)  # noqa: SLF001
     pipeline._tts_cfg = cfg  # noqa: SLF001
     pipeline._stream_factory = speaker.factory  # noqa: SLF001
-    rig = Rig(pipeline, hub, voice, speaker, vad, turn)
+    rig = Rig(pipeline, hub, voice, speaker, vad, turn, local)
     on_turn_end = pipeline.on_turn_end
 
     def spy(turn_id: str, pcm: bytes, duration_ms: int, stop: int) -> None:
@@ -200,9 +208,21 @@ async def start_reply(rig: Rig, turn_id: str, *, blocks: int) -> None:
     rig.pump(blocks - 1)
 
 
-async def test_talking_over_snow_stops_it_and_keeps_the_first_words(
-    groq: FakeGroq,
+async def verdict_in(rig: Rig) -> None:
+    """Wait for the check to answer; the engine applies it on its next chunk."""
+    await until(lambda: bool(rig.turn._verdicts))  # noqa: SLF001
+
+
+def playout_of(rig: Rig):  # noqa: ANN201
+    playout = rig.pipeline._playout  # noqa: SLF001
+    assert playout is not None
+    return playout
+
+
+async def test_talking_over_snow_pauses_it_then_the_check_stops_it_for_good(
+    groq: FakeGroq, caplog: pytest.LogCaptureFixture
 ) -> None:
+    caplog.set_level(logging.INFO, logger="snow.voice")
     voice = HoldEngine(hold_from=2)  # the third chunk is still being synthesized
     rig = await make_rig(groq, voice)
     turn_id = await ask(rig)
@@ -210,12 +230,19 @@ async def test_talking_over_snow_stops_it_and_keeps_the_first_words(
     assert rig.speaker.stream is not None and rig.aborts == []
 
     rig.hear(100, speech=False)
-    speech_start = rig.mic
-    rig.hear(320, speech=True)  # 10 chunks: the barge-in fires on the 8th
-    detection = speech_start + 8 * CHUNK
+    rig.hear(320, speech=True)  # 10 chunks: 300 ms, the pause
+    assert playout_of(rig)._paused  # noqa: SLF001
+    assert rig.aborts == [], "a pause is not a cut"
+    rig.pump(5)
+    held = playout_of(rig).played
+    rig.pump(20)
+    assert playout_of(rig).played == held  # the held reply does not advance
 
+    rig.hear(30 * 32, speech=True)  # 30 more: the window's 700 ms is reached
+    await verdict_in(rig)
+    assert rig.aborts == [], "the check answers; nothing is cut before the verdict"
+    rig.hear(32, speech=True)  # the engine applies the verdict
     assert rig.aborts, "playback was not aborted"
-    assert rig.aborts[0] - detection <= 150 * MS
     await until(lambda: bool(of(rig.hub, ReplyInterrupted)))
     await rig.pipeline._q.join()  # noqa: SLF001
 
@@ -231,6 +258,9 @@ async def test_talking_over_snow_stops_it_and_keeps_the_first_words(
     assert rig.pipeline._reply is None  # noqa: SLF001
     assert rig.pipeline._pending is None  # noqa: SLF001
     assert of(rig.hub, PresenceState)[-1].state == "listening"
+    # the logs carry the reason and numbers, never the words
+    assert "barge_check episode=1 reason=ok" in caplog.text
+    assert rig.local.heard not in caplog.text
 
     # The late rest of the cancelled reply must not start speaking again.
     texts_before = len(voice.texts)
@@ -247,10 +277,10 @@ async def test_talking_over_snow_stops_it_and_keeps_the_first_words(
     second = of(rig.hub, TranscriptFinal)[1]
     assert second.turn_id != turn_id
     pcm = np.frombuffer(rig.turn_pcm[-1], dtype=np.int16)
-    assert int(np.count_nonzero(pcm == SPEECH)) == 20 * CHUNK  # every speech chunk
+    assert int(np.count_nonzero(pcm == SPEECH)) == 51 * CHUNK  # every speech chunk
 
 
-async def test_barge_in_on_the_very_first_audio_cancels_the_whole_reply(
+async def test_a_confirmed_barge_in_on_the_very_first_audio_cancels_the_whole_reply(
     groq: FakeGroq,
 ) -> None:
     voice = HoldEngine(hold_from=1)
@@ -263,7 +293,9 @@ async def test_barge_in_on_the_very_first_audio_cancels_the_whole_reply(
     await asyncio.sleep(0)
     await asyncio.sleep(0)
 
-    rig.hear(320, speech=True)
+    rig.hear(40 * 32, speech=True)  # the pause at 10 chunks, the check at 40
+    await verdict_in(rig)
+    rig.hear(32, speech=True)
     await until(lambda: bool(of(rig.hub, ReplyInterrupted)))
 
     assert of(rig.hub, TurnCancelled)[0].cancel_reason == "barge_in"
@@ -274,58 +306,68 @@ async def test_barge_in_on_the_very_first_audio_cancels_the_whole_reply(
     assert len(voice.texts) == 2  # nothing after the cut was synthesized
 
 
-async def test_200_ms_of_speech_over_snow_is_not_a_barge_in(groq: FakeGroq) -> None:
-    voice = HoldEngine(hold_from=2)
-    rig = await make_rig(groq, voice)
+@pytest.mark.parametrize(
+    "heard", ["", "second sentence is here", None], ids=["noise", "echo", "error"]
+)
+async def test_a_rejected_check_resumes_the_reply_and_it_plays_to_the_end(
+    groq: FakeGroq, heard: str | None
+) -> None:
+    rig = await make_rig(groq, FakeEngine())
     turn_id = await ask(rig)
-    await start_reply(rig, turn_id, blocks=10)
+    await start_reply(rig, turn_id, blocks=30)
+    if heard is None:
+        rig.local.fail_transcribe = True
+    else:
+        rig.local.heard = heard
 
-    rig.hear(192, speech=True)  # 6 chunks
-    rig.hear(300, speech=False)
-    await asyncio.sleep(0.05)
-
+    rig.hear(320, speech=True)  # the pause
+    rig.hear(15 * 32, speech=False)  # quiet: the episode is checked once
+    assert playout_of(rig)._paused  # noqa: SLF001
+    rig.pump(10)
+    await verdict_in(rig)
+    rig.hear(32, speech=False)  # the engine applies the verdict
+    assert not playout_of(rig)._paused  # noqa: SLF001
     assert rig.aborts == []
-    assert of(rig.hub, TurnCancelled) == [] and of(rig.hub, ReplyInterrupted) == []
-    assert rig.pipeline._reply is not None  # noqa: SLF001
-    assert voice.cancelled == 0
+
+    await play_out(rig.pipeline, rig.hub, rig.speaker)
+    assert of(rig.hub, ReplyInterrupted) == [] and of(rig.hub, TurnCancelled) == []
+    assert rig.local.windows == [(10 + 13) * CHUNK]  # one check, the whole episode
 
 
-async def test_a_352_ms_burst_over_a_warming_canceller_is_not_a_barge_in(
+async def test_speech_over_a_warming_canceller_needs_600_ms_before_the_pause(
     groq: FakeGroq,
 ) -> None:
-    """A cold canceller leaves residual up to 352 ms; while warming it cannot cut in."""
     rig = await make_rig(groq, HoldEngine(hold_from=2))
     turn_id = await ask(rig)
     rig.turn.echo_warming = lambda: True
     await start_reply(rig, turn_id, blocks=10)
 
-    rig.hear(352, speech=True)
-    rig.hear(300, speech=False)
-    await asyncio.sleep(0.05)
-
-    assert rig.aborts == []
+    rig.hear(352, speech=True)  # a cold canceller's residual is up to 352 ms
+    assert not playout_of(rig)._paused  # noqa: SLF001
+    assert rig.aborts == [] and rig.local.windows == []
     assert of(rig.hub, TurnCancelled) == [] and of(rig.hub, ReplyInterrupted) == []
     assert rig.pipeline._reply is not None  # noqa: SLF001
+    rig.hear(256, speech=True)  # 19 chunks: 608 ms
+    assert playout_of(rig)._paused  # noqa: SLF001
 
 
-async def test_warm_up_barge_in_needs_600_ms_and_keeps_the_whole_onset(
-    groq: FakeGroq,
-) -> None:
+async def test_a_warm_up_barge_in_keeps_the_whole_onset(groq: FakeGroq) -> None:
     rig = await make_rig(groq, HoldEngine(hold_from=2))
     turn_id = await ask(rig)
     rig.turn.echo_warming = lambda: True
     await start_reply(rig, turn_id, blocks=10)
 
     rig.hear(100, speech=False)
-    rig.hear(640, speech=True)  # 20 chunks: the barge-in fires on the 19th (608 ms)
-    assert rig.aborts, "playback was not aborted"
+    rig.hear(49 * 32, speech=True)  # the pause at 19 chunks, the check at 49
+    await verdict_in(rig)
+    rig.hear(32, speech=True)
     await until(lambda: bool(of(rig.hub, ReplyInterrupted)))
 
     rig.hear(320, speech=True)
     rig.hear(500, speech=False)
     await until(lambda: len(of(rig.hub, TranscriptFinal)) == 2)
     pcm = np.frombuffer(rig.turn_pcm[-1], dtype=np.int16)
-    assert int(np.count_nonzero(pcm == SPEECH)) == 30 * CHUNK  # every speech chunk
+    assert int(np.count_nonzero(pcm == SPEECH)) == 60 * CHUNK  # every speech chunk
 
 
 async def test_the_wake_phrase_over_snow_stops_it_at_once_and_listens(
@@ -339,6 +381,7 @@ async def test_the_wake_phrase_over_snow_stops_it_at_once_and_listens(
     mic_before = rig.mic
     rig.turn.on_wake(WakeHit(1.0, "t", [np.zeros(1280, dtype=np.int16)], 1280))
     assert rig.aborts == [mic_before]  # stopped on the wake call, no more mic audio
+    assert rig.local.windows == []  # no check
     await until(lambda: bool(of(rig.hub, ReplyInterrupted)))
     await rig.pipeline._q.join()  # noqa: SLF001
 
@@ -362,6 +405,7 @@ async def test_speech_over_snow_ducks_it_and_an_unconfirmed_noise_gives_it_back(
     turn_id = await ask(rig)
     await start_reply(rig, turn_id, blocks=10)
     assert rig.turn.duck == rig.pipeline._playout.set_gain  # noqa: SLF001
+    rig.local.heard = ""  # nothing intelligible
 
     gains: list[float] = []
     real = rig.turn.duck
@@ -373,7 +417,10 @@ async def test_speech_over_snow_ducks_it_and_an_unconfirmed_noise_gives_it_back(
     rig.turn.duck = spy
     rig.hear(192, speech=True)
     assert gains == [0.25]
-    rig.hear(900, speech=False)
+    rig.hear(16 * 32, speech=False)  # quiet: the 6-chunk episode is checked
+    await verdict_in(rig)
+    rig.hear(32, speech=False)
     assert gains == [0.25, 1.0]
+    assert rig.local.windows == [19 * CHUNK]
     assert rig.aborts == []
     assert rig.pipeline._reply is not None  # noqa: SLF001

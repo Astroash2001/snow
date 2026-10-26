@@ -25,6 +25,24 @@ class WakeConfig(_Strict):
     strip_patterns: list[str]
 
 
+class BargeCheckConfig(_Strict):
+    """What the check on a paused episode needs before it stops Snow for good."""
+
+    min_words_verified: int  # words a verified voice needs (1: "Stop." works)
+    min_words_unverified: int  # words with no voiceprint (the degraded mode)
+    echo_match: float  # share of the heard words found in Snow's own last words
+    echo_window_s: float  # how far back Snow's own words count as an echo
+    timeout_s: float  # the words check is given this long, then it fails closed
+
+    @model_validator(mode="after")
+    def _words_are_sane(self) -> Self:
+        if not 1 <= self.min_words_verified <= self.min_words_unverified:
+            raise ValueError(
+                "barge_check needs 1 <= min_words_verified <= min_words_unverified"
+            )
+        return self
+
+
 class TurnConfig(_Strict):
     vad_threshold: float
     start_secs: float
@@ -32,24 +50,51 @@ class TurnConfig(_Strict):
     max_silence_secs: float
     max_turn_secs: float
     wake_alone_window_s: float
-    barge_in_min_ms: int
-    barge_in_warmup_min_ms: int  # while the echo canceller is still adapting
+    barge_in_min_ms: int  # only the wake acknowledgement's cut-off (see `_chunk`)
+    barge_in_warmup_min_ms: int  # the pause trigger while the echo canceller adapts
     # a quiet stretch up to this long inside the user's words keeps a barge-in run
     barge_gap_ms: int
     duck_after_ms: int  # this much speech over Snow lowers its voice
     duck_gain: float  # Snow's playout gain while ducked
-    # an unconfirmed barge-in releases the duck this long after its first speech
+    pause_after_ms: int  # this much speech over Snow pauses it, holding the rest
+    echo_tail_ms: int  # audio this soon after a pause is not checked (echo dies away)
+    verify_speech_ms: int  # VAD speech in the check window that starts the check
+    check_min_speech_ms: int  # an episode with this much speech is checked once
+    quiet_resume_ms: int  # this long with no speech ends an episode
+    reject_hold_s: float  # after a rejected check, new speech only ducks this long
+    # an unconfirmed episode gives the voice back (duck released, pause resumed) this
+    # long after its first speech
     duck_release_s: float
 
     @model_validator(mode="after")
     def _duck_is_sane(self) -> Self:
         if not 0 < self.duck_gain <= 1:
             raise ValueError("turn.duck_gain must be above 0 and at most 1")
-        longest = max(self.barge_in_min_ms, self.barge_in_warmup_min_ms)
-        if self.duck_release_s * 1000 < longest:
+        timings = (
+            self.pause_after_ms,
+            self.echo_tail_ms,
+            self.verify_speech_ms,
+            self.check_min_speech_ms,
+            self.quiet_resume_ms,
+            self.reject_hold_s,
+        )
+        if any(v <= 0 for v in timings):
+            raise ValueError("turn pause, check and hold timings must be above 0")
+        if self.duck_after_ms > self.pause_after_ms:
+            raise ValueError("turn.duck_after_ms must not exceed turn.pause_after_ms")
+        if self.check_min_speech_ms > self.pause_after_ms:
             raise ValueError(
-                "turn.duck_release_s is shorter than a barge-in minimum: "
-                "a barge-in could never be confirmed"
+                "turn.check_min_speech_ms must not exceed turn.pause_after_ms"
+            )
+        needed = (
+            max(self.pause_after_ms, self.barge_in_warmup_min_ms)
+            + self.echo_tail_ms
+            + self.verify_speech_ms
+        )
+        if self.duck_release_s * 1000 < needed:
+            raise ValueError(
+                "turn.duck_release_s is shorter than a pause, echo tail and check "
+                "window: a barge-in could never be confirmed"
             )
         return self
 
@@ -115,3 +160,20 @@ class VoiceConfig(_Strict):
     phrases: PhrasesConfig
     stt: SttConfig
     tone: ToneConfig
+    barge_check: BargeCheckConfig
+
+    @model_validator(mode="after")
+    def _release_covers_the_words_check(self) -> Self:
+        t = self.turn
+        needed = (
+            max(t.pause_after_ms, t.barge_in_warmup_min_ms)
+            + t.echo_tail_ms
+            + t.verify_speech_ms
+            + self.barge_check.timeout_s * 1000
+        )
+        if t.duck_release_s * 1000 < needed:
+            raise ValueError(
+                "turn.duck_release_s is shorter than a pause, echo tail, check window "
+                "and barge_check.timeout_s: a verdict could arrive stale"
+            )
+        return self
