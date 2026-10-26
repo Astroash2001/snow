@@ -46,10 +46,20 @@ def voice_cfg() -> VoiceConfig:
     """voice.toml waking on the pretrained hey_jarvis stand-in: the fixtures say
     "Hey Jarvis", and the trained hey_snow model is gitignored (CI never has it).
     The barge-in and turn-end fixtures are timed for a 250 ms run and a 0.2 s stop;
-    the live values are tuned on the real mic (voice.toml)."""
+    the duck keys are pinned too; the live values are tuned on the real mic
+    (voice.toml)."""
     cfg = load_config("voice.toml", VoiceConfig)
     wake = cfg.wake.model_copy(update={"model": "hey_jarvis", "model_sha256": ""})
-    turn = cfg.turn.model_copy(update={"barge_in_min_ms": 250, "stop_secs": 0.2})
+    turn = cfg.turn.model_copy(
+        update={
+            "barge_in_min_ms": 250,
+            "stop_secs": 0.2,
+            "barge_gap_ms": 150,
+            "duck_after_ms": 150,
+            "duck_gain": 0.25,
+            "duck_release_s": 1.0,
+        },
+    )
     return cfg.model_copy(update={"wake": wake, "turn": turn})
 
 

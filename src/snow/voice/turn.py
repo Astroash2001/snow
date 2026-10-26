@@ -133,6 +133,8 @@ class TurnEngine:
         self.events: EngineEvents = events or NullEvents()
         # True while the echo canceller is still adapting; set by the pipeline.
         self.echo_warming: Callable[[], bool] = lambda: False
+        # Sets Snow's playout gain (audio thread); set by the pipeline.
+        self.duck: Callable[[float], None] = lambda gain: None
         self._sr = sample_rate
         self.state = State.SLEEPING
         self._turn: _Turn | None = None
@@ -143,9 +145,13 @@ class TurnEngine:
         self._replaying = False
         # Barge-in (VOIC-06): Snow is audibly speaking; the user's voice may cut it off.
         self._speaking_out = False
-        self._barge_run = 0  # consecutive speech samples heard over the reply
-        longest = max(cfg.barge_in_min_ms, cfg.barge_in_warmup_min_ms)
-        ring = math.ceil((longest / 1000 + _BARGE_LEAD_S) * sample_rate)
+        # One barge-in episode from the first speech chunk heard over the reply.
+        self._barge_span = 0  # samples since the episode's first speech (0: none)
+        self._barge_run = 0  # speech samples in the current run (gaps tolerated)
+        self._barge_gap = 0  # quiet samples since the last speech chunk
+        self._ducked = False
+        # The config validator keeps the release time above both barge-in minimums.
+        ring = math.ceil((cfg.duck_release_s + _BARGE_LEAD_S) * sample_rate)
         self._ring: deque[Pcm] = deque(maxlen=math.ceil(ring / CHUNK))
         # Loop thread -> audio thread requests; deque appends are thread-safe.
         self._inbox: deque[tuple[str, str]] = deque()
@@ -180,7 +186,7 @@ class TurnEngine:
                 self._reply_done()
             elif kind == "speaking":
                 self._speaking_out = bool(arg)
-                self._barge_run = 0
+                self._reset_barge()
                 self._ring.clear()
             elif kind == "mute":
                 self._close_turn()
@@ -276,14 +282,40 @@ class TurnEngine:
         self._chunk(chunk)
 
     def _listen_over(self, chunk: Pcm) -> None:
-        """A reply is audible and no turn is open: enough speech cuts it off."""
+        """A reply is audible and no turn is open: enough speech cuts it off.
+
+        Real speech has short quiet chunks, and resetting the count on each one made a
+        barge-in take 1 to 2 s (G-01-5), so gaps up to `barge_gap_ms` are tolerated.
+        """
+        cfg = self._cfg
         self._ring.append(chunk)
-        if self._vad.speech_prob(chunk) < self._cfg.vad_threshold:
-            self._barge_run = 0
+        speech = self._vad.speech_prob(chunk) >= cfg.vad_threshold
+        if self._barge_span == 0 and not speech:
             return
-        self._barge_run += CHUNK
+        self._barge_span += CHUNK
+        if speech:
+            self._barge_run += CHUNK
+            self._barge_gap = 0
+        else:
+            self._barge_gap += CHUNK
+            if self._barge_gap > self._samples(cfg.barge_gap_ms / 1000):
+                self._barge_run = 0  # the run broke, the episode goes on
         if self._barge_run >= self._barge_min():
             self._barge_in()
+            return
+        if not self._ducked and self._barge_run >= self._samples(
+            cfg.duck_after_ms / 1000
+        ):
+            self._ducked = True
+            self.duck(cfg.duck_gain)
+        if self._barge_span >= self._samples(cfg.duck_release_s):
+            if self._ducked:
+                self.duck(1.0)  # an unconfirmed noise: Snow carries on at full level
+            self._reset_barge()
+
+    def _reset_barge(self) -> None:
+        self._barge_span = self._barge_run = self._barge_gap = 0
+        self._ducked = False
 
     def _barge_min(self) -> int:
         """Samples of speech over Snow's voice that count as a barge-in."""
@@ -295,7 +327,7 @@ class TurnEngine:
         """Snow's voice is cut off: stop waiting, drop the barge-in state, tell the pipeline."""
         self._ring.clear()
         self._speaking_out = False
-        self._barge_run = 0
+        self._reset_barge()
         self._waiting = False
         self._idle = 0
         self._eot.clear()
@@ -304,7 +336,8 @@ class TurnEngine:
 
     def _barge_in(self) -> None:
         """Stop waiting and open the next turn on the audio that barged in."""
-        seed = list(self._ring)
+        lead = math.ceil((self._barge_span + self._samples(_BARGE_LEAD_S)) / CHUNK)
+        seed = list(self._ring)[-lead:]
         self._cut()
         t = _Turn(id=uuid.uuid4().hex[:12], boundary=0, follow_on=True)
         t.chunks, t.samples, t.speaking = seed, len(seed) * CHUNK, True
