@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Always-On Voice Loop
 status: executing
 stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-10-26T13:19:55.741Z"
+last_updated: "2026-10-26T17:53:52.318Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase 01 execution started
-state_head: cb6968a127e378ff4ac6fe769ed7e45d7fd8e5fc
+state_head: 9f8ae7bb2fb0807134afc4d6165649c345913653
 progress:
   total_phases: 7
   completed_phases: 0
@@ -88,6 +88,7 @@ None yet.
 | 261018-pvq | Voice robustness batch: priority, playout rebuffer, sleep-aware supervisor, Groq STT filter | 2026-10-19 | 17d6386 | [261018-pvq-voice-robustness-batch-priority-playout-](./quick/261018-pvq-voice-robustness-batch-priority-playout-/) |
 | 261019-3g3 | Jarvis voice: calm persona, paul voice, polish stage (48k soxr, loudness, pauses, EQ, reverb) | 2026-10-19 | cd7337d | [261019-3g3-jarvis-voice-calm-persona-paul-voice-pol](./quick/261019-3g3-jarvis-voice-calm-persona-paul-voice-pol/) |
 | 261026-nvh | Per-model cooldown: a model timeout no longer skips its provider's other models (UAT G-01-16) | 2026-10-26 | cb6968a | [261026-nvh-per-model-cooldown-so-one-slow-model-doe](./quick/261026-nvh-per-model-cooldown-so-one-slow-model-doe/) |
+| 261026-nui | Snappy interruption: Hey Snow stops Snow at once, duck at 150 ms, gap-tolerant 400 ms barge-in, Jarvis answer rules (UAT G-01-5) | 2026-10-26 | 9f8ae7b | [261026-nui-snappy-jarvis-alexa-interruption-and-jar](./quick/261026-nui-snappy-jarvis-alexa-interruption-and-jar/) |
 
 ## Deferred Items
 
