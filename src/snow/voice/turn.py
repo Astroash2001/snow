@@ -2,6 +2,10 @@
 
 Never reads the wall clock, so a recorded file, the pre-roll burst and live audio all
 behave identically. Framework-free: VAD and end-of-turn come in through small protocols.
+
+Barge-in is pause first, decide second: speech over Snow ducks it, then pauses it (the
+rest of the reply is held), and one check runs off the audio thread. Its verdict comes
+back through `verdict()`, so engine tests use a synchronous `check`.
 """
 
 import math
@@ -27,6 +31,8 @@ _LEVEL_FLOOR_DB = -60.0
 _BARGE_LEAD_S = (
     0.3  # audio kept from before the speech that barged in, so no onset is lost
 )
+# A check called at the release deadline is awaited this long (words timeout: 1 s).
+_CHECK_GRACE_S = 2.0
 
 
 def mic_level(chunk: Pcm) -> float:
@@ -135,6 +141,14 @@ class TurnEngine:
         self.echo_warming: Callable[[], bool] = lambda: False
         # Sets Snow's playout gain (audio thread); set by the pipeline.
         self.duck: Callable[[float], None] = lambda gain: None
+        # Pauses (True) or resumes (False) Snow's playout, holding the rest; set by the
+        # pipeline.
+        self.pause: Callable[[bool], None] = lambda paused: None
+        # Asks for the check of an episode's audio; the answer is `verdict()`. The
+        # default accepts at once, the synchronous fake tests want.
+        self.check: Callable[[Pcm, int], None] = lambda pcm, episode: self.verdict(
+            episode, True
+        )
         self._sr = sample_rate
         self.state = State.SLEEPING
         self._turn: _Turn | None = None
@@ -146,15 +160,29 @@ class TurnEngine:
         # Barge-in (VOIC-06): Snow is audibly speaking; the user's voice may cut it off.
         self._speaking_out = False
         # One barge-in episode from the first speech chunk heard over the reply.
+        self._episode = 0  # numbers the episodes, so a late verdict is told apart
         self._barge_span = 0  # samples since the episode's first speech (0: none)
         self._barge_run = 0  # speech samples in the current run (gaps tolerated)
         self._barge_gap = 0  # quiet samples since the last speech chunk
+        self._barge_speech = 0  # VAD speech samples in the whole episode
         self._ducked = False
-        # The config validator keeps the release time above both barge-in minimums.
-        ring = math.ceil((cfg.duck_release_s + _BARGE_LEAD_S) * sample_rate)
+        self._paused = False
+        self._win_started = False  # the pause trigger was reached
+        self._tail = 0  # echo-tail samples still to skip before the window opens
+        self._win: list[Pcm] = []
+        self._win_speech = 0
+        self._checked = False  # this episode's one check was called
+        self._late = False  # ... at the release deadline, so its verdict is awaited
+        self._pending: int | None = None  # the episode whose verdict is awaited
+        self._hold = 0  # samples of reject hold left (new speech only ducks)
+        # The config validator keeps the release time above a confirmed barge-in.
+        ring = math.ceil(
+            (cfg.duck_release_s + _BARGE_LEAD_S + _CHECK_GRACE_S) * sample_rate
+        )
         self._ring: deque[Pcm] = deque(maxlen=math.ceil(ring / CHUNK))
         # Loop thread -> audio thread requests; deque appends are thread-safe.
         self._inbox: deque[tuple[str, str]] = deque()
+        self._verdicts: deque[tuple[int, bool]] = deque()
 
     def reply_finished(self) -> None:
         """Thread-safe: the reply is done; listen again, restart the silence timer."""
@@ -166,10 +194,14 @@ class TurnEngine:
 
     def set_speaking(self, speaking: bool) -> None:
         """Thread-safe: Snow's voice is audible (True) or has stopped (False). While it
-        is, the user speaking for `barge_in_min_ms` (`barge_in_warmup_min_ms` while
-        the echo canceller is still adapting) interrupts it (VOIC-06), and so does
-        the wake phrase."""
+        is, the user speaking over it ducks, pauses and gets checked (VOIC-06); an
+        accepted check interrupts it, and so does the wake phrase."""
         self._inbox.append(("speaking", "1" if speaking else ""))
+
+    def verdict(self, episode: int, ok: bool) -> None:
+        """Thread-safe: the check of `episode` accepted (True) or rejected it. A verdict
+        that is late, for another episode or after Snow went quiet is ignored."""
+        self._verdicts.append((episode, ok))
 
     def mute(self) -> None:
         """Thread-safe: drop any open turn or conversation silently (D-10, VOIC-03)."""
@@ -187,6 +219,7 @@ class TurnEngine:
             elif kind == "speaking":
                 self._speaking_out = bool(arg)
                 self._reset_barge()
+                self._hold = 0
                 self._ring.clear()
             elif kind == "mute":
                 self._close_turn()
@@ -199,6 +232,22 @@ class TurnEngine:
                     self.state = State.SLEEPING
             else:
                 self._end(arg)
+        while self._verdicts:
+            self._apply(*self._verdicts.popleft())
+
+    def _apply(self, episode: int, ok: bool) -> None:
+        if (
+            self._pending != episode
+            or not self._speaking_out
+            or self._turn is not None
+            or not self._waiting
+        ):
+            return  # late, another episode's, or Snow is no longer audible
+        if ok:
+            self._barge_in()
+        else:
+            self._give_back()
+            self._hold = self._samples(self._cfg.reject_hold_s)
 
     def _reply_done(self) -> None:
         self._idle = 0
@@ -282,43 +331,108 @@ class TurnEngine:
         self._chunk(chunk)
 
     def _listen_over(self, chunk: Pcm) -> None:
-        """A reply is audible and no turn is open: enough speech cuts it off.
+        """A reply is audible and no turn is open: speech over it is one episode.
 
-        Real speech has short quiet chunks, and resetting the count on each one made a
-        barge-in take 1 to 2 s (G-01-5), so gaps up to `barge_gap_ms` are tolerated.
+        The episode ducks Snow, pauses it and has its audio checked once; an accepting
+        verdict cuts Snow off, anything else gives the voice back. Real speech has short
+        quiet chunks, so gaps up to `barge_gap_ms` are tolerated inside a run (G-01-5).
         """
         cfg = self._cfg
         self._ring.append(chunk)
+        self._hold = max(0, self._hold - CHUNK)  # counts only while Snow is audible
         speech = self._vad.speech_prob(chunk) >= cfg.vad_threshold
-        if self._barge_span == 0 and not speech:
-            return
+        if self._barge_span == 0:
+            if not speech:
+                return
+            self._episode += 1
         self._barge_span += CHUNK
         if speech:
             self._barge_run += CHUNK
             self._barge_gap = 0
+            self._barge_speech += CHUNK
         else:
             self._barge_gap += CHUNK
             if self._barge_gap > self._samples(cfg.barge_gap_ms / 1000):
                 self._barge_run = 0  # the run broke, the episode goes on
-        if self._barge_run >= self._barge_min():
-            self._barge_in()
-            return
+        if self._win_started:
+            self._windowed(chunk, speech)
+        elif self._barge_run >= self._pause_min():
+            self._win_started = True
+            if self._hold > 0:  # TV after a reject: stay ducked, check at once
+                self._windowed(chunk, speech)
+            else:
+                self._paused = True
+                self.pause(True)
+                self._tail = self._samples(cfg.echo_tail_ms / 1000)
+        if (
+            self._win_started
+            and not self._checked
+            and self._win_speech >= self._samples(cfg.verify_speech_ms / 1000)
+        ):
+            self._request_check(np.concatenate(self._win))
         if not self._ducked and self._barge_run >= self._samples(
             cfg.duck_after_ms / 1000
         ):
             self._ducked = True
             self.duck(cfg.duck_gain)
+        enough = self._barge_speech >= self._samples(cfg.check_min_speech_ms / 1000)
+        if not self._checked and self._barge_gap >= self._samples(
+            cfg.quiet_resume_ms / 1000
+        ):
+            if not enough:
+                self._give_back()  # a blip: no check, no hold
+                return
+            self._request_check(self._episode_audio())  # a short "Stop." is heard
         if self._barge_span >= self._samples(cfg.duck_release_s):
-            if self._ducked:
-                self.duck(1.0)  # an unconfirmed noise: Snow carries on at full level
-            self._reset_barge()
+            if not self._checked and enough:
+                self._request_check(self._episode_audio())  # spaced bursts: one check
+                self._late = True
+            if not self._late or self._barge_span >= self._samples(
+                cfg.duck_release_s + _CHECK_GRACE_S
+            ):
+                self._give_back()  # unconfirmed: Snow carries on at full level
+
+    def _windowed(self, chunk: Pcm, speech: bool) -> None:
+        """Keep a chunk for the check once Snow's echo tail after the pause is over."""
+        if self._tail > 0:
+            self._tail -= CHUNK
+            return
+        self._win.append(chunk)
+        self._win_speech += CHUNK * speech
+
+    def _episode_audio(self) -> Pcm:
+        n = math.ceil(self._barge_span / CHUNK)
+        return np.concatenate(list(self._ring)[-n:])
+
+    def _request_check(self, pcm: Pcm) -> None:
+        self._checked = True
+        self._pending = self._episode
+        self.check(pcm, self._episode)
+
+    def _give_back(self) -> None:
+        """The episode ends without a cut: resume Snow, restore its level."""
+        if self._paused:
+            self.pause(False)
+        if self._ducked:
+            self.duck(1.0)
+        self._reset_barge()
 
     def _reset_barge(self) -> None:
-        self._barge_span = self._barge_run = self._barge_gap = 0
-        self._ducked = False
+        self._barge_span = self._barge_run = self._barge_gap = self._barge_speech = 0
+        self._ducked = self._paused = self._win_started = False
+        self._checked = self._late = False
+        self._tail = self._win_speech = 0
+        self._win = []
+        self._pending = None
+
+    def _pause_min(self) -> int:
+        """Samples of speech over Snow that pause it."""
+        cfg = self._cfg
+        ms = cfg.barge_in_warmup_min_ms if self.echo_warming() else cfg.pause_after_ms
+        return self._samples(ms / 1000)
 
     def _barge_min(self) -> int:
-        """Samples of speech over Snow's voice that count as a barge-in."""
+        """Samples of speech that cut off a short wake acknowledgement (`_chunk`)."""
         cfg = self._cfg
         ms = cfg.barge_in_warmup_min_ms if self.echo_warming() else cfg.barge_in_min_ms
         return self._samples(ms / 1000)

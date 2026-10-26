@@ -76,6 +76,12 @@ class LocalStt:
         self._q.put(("finish", done))
         return done
 
+    def transcribe(self, pcm: npt.NDArray[np.int16]) -> "Future[str]":
+        """The words in an in-memory window, apart from any open turn (barge-in)."""
+        done: Future[str] = Future()
+        self._q.put(("transcribe", (pcm, done)))
+        return done
+
     def cancel(self) -> None:
         """Drop the open turn without a transcript (wake alone, mute)."""
         self._q.put(("cancel", None))
@@ -114,6 +120,9 @@ class LocalStt:
                     stream.add_audio(
                         (arg.astype(np.float32) / 32768.0).tolist(), self._rate
                     )
+                elif kind == "transcribe":
+                    window, done = arg
+                    done.set_result(self._words(transcriber, window))
                 elif kind == "finish":
                     arg.set_result(self._final(stream))
                     stream = None
@@ -123,10 +132,20 @@ class LocalStt:
                 log.warning("local_stt_failed kind=%s", type(e).__name__)
                 if kind == "finish" and not arg.done():
                     arg.set_exception(e)
+                if kind == "transcribe" and not arg[1].done():
+                    arg[1].set_exception(e)
+                    continue  # the open turn is untouched
                 stream = None
         if stream is not None:
             stream.close()
         transcriber.close()
+
+    def _words(self, transcriber: Any, pcm: npt.NDArray[np.int16]) -> str:
+        samples = (pcm.astype(np.float32) / 32768.0).tolist()
+        result = transcriber.transcribe_without_streaming(samples, self._rate)
+        return " ".join(
+            t for line in getattr(result, "lines", []) if (t := line.text.strip())
+        )
 
     def _final(self, stream: Any) -> str:
         if stream is None:
@@ -156,3 +175,5 @@ class LocalStt:
                 return
             if kind == "finish":
                 arg.set_exception(RuntimeError("local speech model unavailable"))
+            elif kind == "transcribe":
+                arg[1].set_exception(RuntimeError("local speech model unavailable"))

@@ -12,6 +12,10 @@ real-time factor (RTF, EWMA over clauses) is tracked from `clause_done`; above
 `hold_rtf` each clause starts only once it is fully synthesized. Fades are applied to
 the block before `on_render`, so the echo reference equals what is played. So is the
 barge-in duck gain (`set_gain`).
+
+`set_paused` holds the reply: the gain ramps to 0 over 30 ms, then nothing is taken from
+the queue, so `played` stays truthful for `_Reply.heard()` and the rest resumes from the
+exact held sample. While paused the utterance neither drains nor counts an underrun.
 """
 
 import collections
@@ -154,6 +158,7 @@ class Playout:
         self._clause = 0  # samples pushed since the last clause boundary
         self._gain = 1.0  # level now (ramps) and the level it ramps to
         self._gain_to = 1.0
+        self._paused = False
 
     @property
     def holding(self) -> bool:
@@ -172,6 +177,12 @@ class Playout:
         the next utterance reset it to 1.0."""
         with self._lock:
             self._gain_to = gain
+
+    def set_paused(self, paused: bool) -> None:
+        """Thread-safe: hold the reply (ramp to silence, keep the rest queued) or
+        continue it from the held sample; `abort` and the next utterance clear it."""
+        with self._lock:
+            self._paused = paused
 
     def start_utterance(self) -> None:
         with self._lock:
@@ -240,7 +251,10 @@ class Playout:
         first = drained = False
         with self._lock:
             filled = 0
-            if self._playing:
+            paused = self._paused
+            target = 0.0 if paused else self._gain_to
+            # silent and held: take nothing, so `played` and the queue stand still
+            if self._playing and not (paused and self._gain == 0.0):
                 while filled < frames and self._chunks:
                     head = self._chunks[0]
                     take = min(frames - filled, len(head))
@@ -252,8 +266,8 @@ class Playout:
                         self._chunks[0] = head[take:]
                 self._buffered -= filled
                 self._played += filled
-                if filled and (self._gain != 1.0 or self._gain_to != 1.0):
-                    delta = self._gain_to - self._gain
+                if filled and (self._gain != 1.0 or target != 1.0):
+                    delta = target - self._gain
                     ramp = self._gain + np.sign(delta) * np.minimum(
                         np.arange(1, filled + 1) * self._gain_step, abs(delta)
                     )
@@ -265,7 +279,9 @@ class Playout:
                     n = min(filled, self._fade)
                     out[:n] *= self._fade_up[:n]
                     self._fade_in = False
-                if filled < frames and self._ended:
+                if paused:
+                    pass  # a held reply neither drains nor underruns
+                elif filled < frames and self._ended:
                     drained = True
                     self._reset_utterance()
                 elif filled < frames:  # underrun: fade out, re-buffer, fade back in

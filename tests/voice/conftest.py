@@ -45,9 +45,10 @@ HEY_SNOW = Path(__file__).resolve().parents[2] / "models" / "wakeword" / "hey_sn
 def voice_cfg() -> VoiceConfig:
     """voice.toml waking on the pretrained hey_jarvis stand-in: the fixtures say
     "Hey Jarvis", and the trained hey_snow model is gitignored (CI never has it).
-    The barge-in and turn-end fixtures are timed for a 250 ms run and a 0.2 s stop;
-    the duck keys are pinned too; the live values are tuned on the real mic
-    (voice.toml)."""
+    The turn-end fixtures are timed for a 0.2 s stop; the duck, pause, check and
+    release keys are pinned too (300 ms pause, 250 ms echo tail, 700 ms check window,
+    120 ms short check, 400 ms quiet, 5 s reject hold, 2 s release); the live values
+    are tuned on the real mic (voice.toml)."""
     cfg = load_config("voice.toml", VoiceConfig)
     wake = cfg.wake.model_copy(update={"model": "hey_jarvis", "model_sha256": ""})
     turn = cfg.turn.model_copy(
@@ -57,7 +58,13 @@ def voice_cfg() -> VoiceConfig:
             "barge_gap_ms": 150,
             "duck_after_ms": 150,
             "duck_gain": 0.25,
-            "duck_release_s": 1.0,
+            "pause_after_ms": 300,
+            "echo_tail_ms": 250,
+            "verify_speech_ms": 700,
+            "check_min_speech_ms": 120,
+            "quiet_resume_ms": 400,
+            "reject_hold_s": 5.0,
+            "duck_release_s": 2.0,
         },
     )
     return cfg.model_copy(update={"wake": wake, "turn": turn})
@@ -317,6 +324,11 @@ class FakeLocalStt:
         self.finished = False
         self.fed_after_finish = 0
         self.asked_at: list[int] = []  # samples fed so far at each partial() call
+        # What the barge-in check hears (a sentence unrelated to any reply text), and
+        # how many samples each window had.
+        self.heard = "please stop and tell me something else"
+        self.windows: list[int] = []
+        self.fail_transcribe = False
         self._seen = ""
 
     def start_turn(self) -> None:
@@ -343,6 +355,15 @@ class FakeLocalStt:
 
     def cancel(self) -> None:
         self.cancelled += 1
+
+    def transcribe(self, pcm: Frame) -> "Future[str]":
+        self.windows.append(len(pcm))
+        done: Future[str] = Future()
+        if self.fail_transcribe:
+            done.set_exception(RuntimeError("no model"))
+        else:
+            done.set_result(self.heard)
+        return done
 
 
 async def until(cond: Callable[[], bool], limit: float = 5.0) -> None:

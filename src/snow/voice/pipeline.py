@@ -36,6 +36,7 @@ from snow.contracts.events import (
 )
 from snow.contracts.wire import Command, MuteSet, Snapshot
 from snow.voice.aec import EchoCanceller
+from snow.voice.bargein import decide, echo_ratio, words
 from snow.voice.config import VoiceConfig
 from snow.voice.phrases import match_command, strip_wake
 from snow.voice.playout import Playout, StreamFactory, device_rate
@@ -75,6 +76,8 @@ class LocalSource(Protocol):
     def finish(self) -> "Future[str]": ...
 
     def cancel(self) -> None: ...
+
+    def transcribe(self, pcm: Frame) -> "Future[str]": ...
 
 
 @dataclass
@@ -177,6 +180,10 @@ class VoicePipeline:
         self._dropped: deque[str] = deque(maxlen=8)
         # turn id -> [VAD stop, STT final] wall-clock ns, until its reply takes them
         self._marks: dict[str, list[int | None]] = {}
+        # What Snow said lately (monotonic time, text), for the barge-in echo filter.
+        # Loop thread only.
+        self._said: deque[tuple[float, str]] = deque(maxlen=64)
+        engine.check = self._request_check
 
     @property
     def waiting_reply(self) -> bool:
@@ -530,12 +537,51 @@ class VoicePipeline:
             )
             # the user talking over Snow lowers its voice (audio thread -> playout lock)
             self._engine.duck = self._playout.set_gain
+            self._engine.pause = self._pause
         self._tts_ready.set()  # no playout: no voice loaded, replies stay silent
 
     def _hop(self, fn: Callable[..., None], *args: object) -> None:
         """Audio thread -> event loop."""
         assert self._loop is not None  # noqa: S101
         self._loop.call_soon_threadsafe(fn, *args)
+
+    def _pause(self, paused: bool) -> None:
+        """Audio thread: hold (or continue) Snow's reply while a barge-in is checked."""
+        assert self._playout is not None  # noqa: S101 - wired together with the playout
+        self._playout.set_paused(paused)
+        log.info("barge_pause paused=%s", paused)
+
+    def _request_check(self, window: Frame, episode: int) -> None:
+        """Audio thread: the words check runs on the loop, the verdict comes back."""
+        self._hop(self._spawn, self._barge_check(window, episode))
+
+    async def _barge_check(self, window: Frame, episode: int) -> None:
+        """Local words plus the self-echo filter decide a paused episode. Fails closed:
+        no local model, a timeout or an error means no words, so noise never cuts Snow
+        (the wake phrase still does). Logs the reason and numbers, never words."""
+        check = self._cfg.barge_check
+        heard = ""
+        if self._local is not None:
+            try:
+                heard = await asyncio.wait_for(
+                    asyncio.wrap_future(self._local.transcribe(window)),
+                    check.timeout_s,
+                )
+            except Exception:  # noqa: BLE001 - TimeoutError, a missing model, a bad window
+                heard = ""
+        horizon = time.monotonic() - check.echo_window_s
+        said = " ".join(text for at, text in self._said if at >= horizon)
+        # shortcut: no voiceprint yet (plan 261026-wvr-02), so the degraded mode runs
+        reason = decide(None, 0.0, heard, said, check)
+        log.info(
+            "barge_check episode=%d reason=%s score=%s words=%d echo=%.2f",
+            episode,
+            reason,
+            None,
+            len(words(heard)),
+            echo_ratio(heard, said),
+        )
+        self._engine.verdict(episode, reason == "ok")
 
     def _begin(self, turn_id: str | None) -> _Reply:
         reply = self._reply
@@ -612,6 +658,7 @@ class VoicePipeline:
                 while (text := await reply.queue.get()) is not None:
                     reply.chars += len(text)
                     reply.chunks.append((text, reply.pushed))
+                    self._said.append((time.monotonic(), text))
                     started = time.monotonic()
                     yield text
                     # The router resumes us once it has synthesized the clause; waiting

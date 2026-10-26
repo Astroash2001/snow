@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from snow.voice.config import ConversationConfig, TurnConfig
+from snow.config.settings import load_config
+from snow.voice.config import ConversationConfig, TurnConfig, VoiceConfig
 from snow.voice.turn import CHUNK, TurnEngine, mic_level
 from snow.voice.wake import WakeHit
 from tests.voice.conftest import voice_cfg
@@ -244,78 +245,262 @@ def test_the_wake_phrase_while_thinking_is_still_ignored() -> None:
     assert log.count("barge_in") == 0
 
 
-def over_snow() -> tuple[TurnEngine, Vad, Log, list[float]]:
-    """An engine with a reply pending and audible, and the duck gains recorded."""
+class Over:
+    """An engine with a reply pending and audible; every duck, pause and check
+    request is recorded, and no verdict comes until the test sends one."""
+
+    def __init__(self) -> None:
+        self.engine, self.vad, self.log = make()
+        wake(self.engine)
+        speak(self.engine, self.vad)
+        self.engine.set_speaking(True)
+        self.gains: list[float] = []
+        self.pauses: list[bool] = []
+        self.checks: list[tuple[int, int]] = []  # (window samples, episode)
+        self.engine.duck = self.gains.append
+        self.engine.pause = self.pauses.append
+        self.engine.check = lambda pcm, ep: self.checks.append((len(pcm), ep))
+        quiet(self.engine)  # the inbox drains
+
+    def hear(self, chunks: int, *, speech: bool) -> None:
+        self.vad.speech = speech
+        for _ in range(chunks):
+            self.engine.feed(np.zeros(CHUNK, dtype=np.int16))
+
+    def talk(self, chunks: int) -> None:
+        self.hear(chunks, speech=True)
+
+    def hush(self, chunks: int) -> None:
+        self.hear(chunks, speech=False)
+
+    def barge_ins(self) -> int:
+        return self.log.count("barge_in")
+
+
+def test_a_barge_in_tolerates_a_short_gap_inside_the_words() -> None:
+    o = Over()
+    o.talk(4)
+    o.hush(2)
+    o.talk(3)
+    assert o.pauses == []  # 7 speech chunks: three short of 300 ms
+    o.talk(3)
+    assert o.pauses == [True]
+
+
+def test_a_gap_over_150_ms_breaks_the_run() -> None:
+    o = Over()
+    o.talk(4)
+    o.hush(5)
+    o.talk(4)
+    assert o.pauses == [] and o.gains == []
+
+
+def test_speech_over_snow_ducks_at_150_ms_and_pauses_at_300_ms() -> None:
+    o = Over()
+    o.talk(4)
+    assert o.gains == []
+    o.talk(1)
+    assert o.gains == [0.25]
+    o.talk(4)  # 9 chunks, 288 ms
+    assert o.pauses == []
+    o.talk(1)  # 10 chunks, 320 ms
+    assert o.pauses == [True]
+    assert o.barge_ins() == 0 and o.checks == []
+
+
+def test_a_warming_canceller_needs_600_ms_before_the_pause() -> None:
+    o = Over()
+    o.engine.echo_warming = lambda: True
+    o.talk(18)
+    assert o.pauses == []
+    o.talk(1)
+    assert o.pauses == [True]
+
+
+def test_the_check_window_skips_the_echo_tail_and_asks_once_at_700_ms() -> None:
+    o = Over()
+    o.talk(10)  # the pause; the next 8 chunks (250 ms) are Snow's dying echo
+    o.talk(29)  # chunks 11-39: window speech 21 chunks, 10752 samples
+    assert o.checks == []
+    o.talk(1)  # the window's 22nd speech chunk reaches 700 ms
+    assert o.checks == [(22 * CHUNK, 1)]
+    o.talk(5)
+    assert len(o.checks) == 1  # exactly one check per episode
+
+
+def test_an_accepting_verdict_cuts_and_the_turn_covers_the_episode_and_lead() -> None:
+    o = Over()
+    o.hush(20)
+    o.talk(40)
+    assert o.checks == [(22 * CHUNK, 1)]
+    o.engine.verdict(1, True)
+    o.talk(1)
+    names = [n for n in o.log.names() if n != "level"]
+    assert names[-3:] == ["barge_in", "presence", "turn_start"]
+    assert o.pauses == [True] and o.gains == [0.25]  # the pipeline's abort ends it
+    o.hush(10)
+    # the 40 speech chunks, 10 of lead (0.3 s), then 1 more speech and 7 quiet chunks
+    assert o.log.turn_bytes[-1] == (50 + 1 + 7) * CHUNK * 2
+
+
+def test_a_rejecting_verdict_resumes_and_a_later_burst_only_ducks() -> None:
+    o = Over()
+    o.talk(40)
+    o.engine.verdict(1, False)
+    o.hush(1)
+    assert o.pauses == [True, False] and o.gains == [0.25, 1.0]
+    assert o.barge_ins() == 0
+    o.hush(5)
+    o.talk(10)  # inside the 5 s reject hold: a duck, never a pause
+    assert o.pauses == [True, False] and o.gains == [0.25, 1.0, 0.25]
+    o.talk(21)  # its window starts at the trigger chunk, no echo tail skipped
+    assert o.checks[-1] == (22 * CHUNK, 2)
+    o.engine.verdict(2, True)
+    o.talk(1)
+    assert o.barge_ins() == 1
+
+
+def test_the_reject_hold_ends_after_five_seconds_of_audible_snow() -> None:
+    o = Over()
+    o.talk(40)
+    o.engine.verdict(1, False)
+    o.hush(160)  # 5.1 s
+    o.talk(10)
+    assert o.pauses == [True, False, True]
+
+
+def test_a_short_stop_that_ends_before_the_pause_is_still_checked() -> None:
+    o = Over()
+    o.talk(4)  # 128 ms: under the pause trigger
+    o.hush(12)  # 384 ms of quiet: not yet
+    assert o.checks == []
+    o.hush(1)  # 416 ms reaches quiet_resume_ms
+    assert o.checks == [(17 * CHUNK, 1)]  # the whole episode
+    assert o.pauses == []
+    o.engine.verdict(1, True)
+    o.hush(1)
+    assert o.barge_ins() == 1
+
+
+def test_a_one_word_stop_after_the_pause_is_checked_once_on_the_whole_episode() -> None:
+    o = Over()
+    o.talk(10)
+    o.hush(13)
+    assert o.checks == [(23 * CHUNK, 1)]
+    o.hush(10)
+    assert len(o.checks) == 1
+    o.engine.verdict(1, False)
+    o.hush(1)
+    assert o.pauses == [True, False] and o.gains == [0.25, 1.0]
+    o.talk(10)
+    assert o.pauses == [True, False]  # the hold: no second pause
+
+
+def test_a_blip_under_120_ms_is_given_back_with_no_check() -> None:
+    o = Over()
+    o.talk(3)
+    o.hush(13)
+    assert o.checks == [] and o.pauses == [] and o.gains == []
+    o.talk(3)  # a fresh episode, still no hold
+    o.hush(13)
+    assert o.checks == []
+
+
+def test_a_pending_check_gives_the_voice_back_at_the_release() -> None:
+    o = Over()
+    o.talk(40)  # checked, no verdict comes
+    o.talk(23)  # 63 chunks: 2.02 s from the first speech
+    assert o.pauses == [True, False] and o.gains == [0.25, 1.0]
+    o.engine.verdict(1, True)  # late: ignored
+    o.hush(1)
+    assert o.barge_ins() == 0
+
+
+def test_spaced_short_bursts_get_their_one_check_at_the_release() -> None:
+    o = Over()
+    for _ in range(4):  # 56 chunks of 4 speech and 10 quiet
+        o.talk(4)
+        o.hush(10)
+    assert o.checks == [] and o.pauses == [] and o.gains == []
+    o.talk(4)
+    o.hush(3)  # 63 chunks: the release
+    assert o.checks == [(63 * CHUNK, 1)]
+    o.engine.verdict(1, True)  # still awaited: the verdict arrives inside the grace
+    o.hush(1)
+    assert o.barge_ins() == 1
+
+
+def test_spaced_bursts_that_get_no_verdict_end_after_the_grace() -> None:
+    o = Over()
+    for _ in range(5):
+        o.talk(4)
+        o.hush(10)
+    assert len(o.checks) == 1
+    for _ in range(60):  # past 4 s of episode: the deadline plus the grace
+        o.talk(1)
+        o.hush(1)
+    o.engine.verdict(1, True)
+    o.hush(1)
+    assert o.barge_ins() == 0
+
+
+def test_stale_verdicts_never_cut() -> None:
+    o = Over()
+    o.engine.verdict(1, True)  # no episode, no check
+    o.talk(2)
+    assert o.barge_ins() == 0
+    o.talk(38)
+    assert len(o.checks) == 1
+    o.engine.verdict(7, True)  # another episode's
+    o.talk(1)
+    assert o.barge_ins() == 0
+
+
+def test_the_wake_phrase_cuts_a_paused_reply_at_once_with_no_check() -> None:
+    o = Over()
+    o.talk(10)
+    assert o.pauses == [True]
+    o.log.calls.clear()
+    wake(o.engine)
+    assert [c for c in o.log.calls if c[0] != "level"][:2] == [
+        ("barge_in", None),
+        ("presence", "listening"),
+    ]
+    assert o.checks == []
+
+
+def test_the_default_check_accepts_at_once() -> None:
     engine, vad, log = make()
     wake(engine)
     speak(engine, vad)
     engine.set_speaking(True)
-    gains: list[float] = []
-    engine.duck = gains.append
-    quiet(engine)  # the inbox drains
-    return engine, vad, log, gains
-
-
-def hear(engine: TurnEngine, vad: Vad, chunks: int, *, speech: bool) -> None:
-    vad.speech = speech
-    for _ in range(chunks):
+    quiet(engine)
+    vad.speech = True
+    for _ in range(41):
         engine.feed(np.zeros(CHUNK, dtype=np.int16))
-
-
-def test_a_barge_in_tolerates_a_short_gap_inside_the_words() -> None:
-    engine, vad, log, gains = over_snow()
-    hear(engine, vad, 4, speech=True)
-    hear(engine, vad, 2, speech=False)
-    hear(engine, vad, 3, speech=True)
-    assert log.count("barge_in") == 0  # 7 speech chunks: one short of 250 ms
-    hear(engine, vad, 1, speech=True)
     assert log.count("barge_in") == 1
-    assert log.names()[-3:] == ["barge_in", "presence", "turn_start"]
-    assert gains == [0.25]
-
-
-def test_a_gap_over_150_ms_breaks_the_run() -> None:
-    engine, vad, log, gains = over_snow()
-    hear(engine, vad, 4, speech=True)
-    hear(engine, vad, 5, speech=False)
-    hear(engine, vad, 4, speech=True)
-    assert log.count("barge_in") == 0
-    assert gains == []
-
-
-def test_the_duck_comes_at_150_ms_and_is_released_after_a_second() -> None:
-    engine, vad, log, gains = over_snow()
-    hear(engine, vad, 4, speech=True)
-    assert gains == []
-    hear(engine, vad, 1, speech=True)
-    assert gains == [0.25]
-    hear(engine, vad, 26, speech=False)  # 31 chunks into the episode
-    assert gains == [0.25]
-    hear(engine, vad, 1, speech=False)  # the 32nd reaches 1.0 s
-    assert gains == [0.25, 1.0]
-    assert log.count("barge_in") == 0
-
-
-def test_a_confirmed_barge_in_ducks_but_never_releases() -> None:
-    engine, vad, log, gains = over_snow()
-    hear(engine, vad, 8, speech=True)
-    assert gains == [0.25]
-    assert log.count("barge_in") == 1
-
-
-def test_the_barge_in_turn_carries_the_run_and_a_short_lead_only() -> None:
-    engine, vad, log, _ = over_snow()
-    hear(engine, vad, 40, speech=False)
-    hear(engine, vad, 8, speech=True)
-    hear(engine, vad, 20, speech=False)
-    assert log.count("turn_end") == 2
-    assert log.turn_bytes[-1] == (8 + 10 + 7) * CHUNK * 2
 
 
 @pytest.mark.parametrize(
     "update",
-    [{"duck_release_s": 0.5}, {"duck_gain": 0.0}, {"duck_gain": 1.5}],
+    [
+        {"duck_release_s": 0.5},
+        {"duck_release_s": 1.5},  # under pause + echo tail + check window
+        {"duck_gain": 0.0},
+        {"duck_gain": 1.5},
+        {"duck_after_ms": 400},  # after the pause
+        {"check_min_speech_ms": 400},
+        {"echo_tail_ms": 0},
+        {"reject_hold_s": 0.0},
+    ],
 )
-def test_bad_duck_settings_fail_at_load(update: dict[str, float]) -> None:
+def test_bad_turn_settings_fail_at_load(update: dict[str, float]) -> None:
     with pytest.raises(ValidationError):
         TurnConfig(**{**CFG.turn.model_dump(), **update})
+
+
+def test_a_release_shorter_than_the_words_check_fails_at_load() -> None:
+    live = load_config("voice.toml", VoiceConfig)
+    check = live.barge_check.model_copy(update={"timeout_s": 5.0})
+    with pytest.raises(ValidationError):
+        VoiceConfig(**{**live.model_dump(), "barge_check": check.model_dump()})
