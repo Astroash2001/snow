@@ -1,8 +1,8 @@
 """Typed config/voice.toml (CORE-04). Extras are forbidden: a typo fails at start."""
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class _Strict(BaseModel):
@@ -34,6 +34,24 @@ class TurnConfig(_Strict):
     wake_alone_window_s: float
     barge_in_min_ms: int
     barge_in_warmup_min_ms: int  # while the echo canceller is still adapting
+    # a quiet stretch up to this long inside the user's words keeps a barge-in run
+    barge_gap_ms: int
+    duck_after_ms: int  # this much speech over Snow lowers its voice
+    duck_gain: float  # Snow's playout gain while ducked
+    # an unconfirmed barge-in releases the duck this long after its first speech
+    duck_release_s: float
+
+    @model_validator(mode="after")
+    def _duck_is_sane(self) -> Self:
+        if not 0 < self.duck_gain <= 1:
+            raise ValueError("turn.duck_gain must be above 0 and at most 1")
+        longest = max(self.barge_in_min_ms, self.barge_in_warmup_min_ms)
+        if self.duck_release_s * 1000 < longest:
+            raise ValueError(
+                "turn.duck_release_s is shorter than a barge-in minimum: "
+                "a barge-in could never be confirmed"
+            )
+        return self
 
 
 class ConversationConfig(_Strict):

@@ -10,7 +10,8 @@ milliseconds, waits until `rebuffer_ms` is queued or the clause is complete, and
 back in, instead of playing silence gaps for the rest of the reply. The synthesis
 real-time factor (RTF, EWMA over clauses) is tracked from `clause_done`; above
 `hold_rtf` each clause starts only once it is fully synthesized. Fades are applied to
-the block before `on_render`, so the echo reference equals what is played.
+the block before `on_render`, so the echo reference equals what is played. So is the
+barge-in duck gain (`set_gain`).
 """
 
 import collections
@@ -35,6 +36,8 @@ _FLOOR_DB = -60.0
 _FADE_S = 0.005
 # Weight of the newest clause: the EWMA follows a load change within two clauses.
 _RTF_ALPHA = 0.5
+# a full 1.0 gain swing takes 30 ms: instant to the ear, too slow to click
+_DUCK_RAMP_S = 0.03
 
 
 class OutputStream(Protocol):
@@ -126,6 +129,7 @@ class Playout:
             0  # reset by start_utterance only, so the pipeline can read it after
         )
         self._block = int(sample_rate * _BLOCK_S)
+        self._gain_step = 1.0 / (sample_rate * _DUCK_RAMP_S)  # per sample
         self.on_first_audio = on_first_audio
         self.on_level = on_level
         self.on_drained = on_drained
@@ -148,6 +152,8 @@ class Playout:
         self._threshold = self._prebuffer  # queued samples that start (or resume) play
         self._fade_in = False
         self._clause = 0  # samples pushed since the last clause boundary
+        self._gain = 1.0  # level now (ramps) and the level it ramps to
+        self._gain_to = 1.0
 
     @property
     def holding(self) -> bool:
@@ -160,6 +166,12 @@ class Playout:
         return self._played
 
     # --- event loop side ----------------------------------------------------------
+
+    def set_gain(self, gain: float) -> None:
+        """Thread-safe: ramp Snow's voice toward `gain` (barge-in duck); `abort` and
+        the next utterance reset it to 1.0."""
+        with self._lock:
+            self._gain_to = gain
 
     def start_utterance(self) -> None:
         with self._lock:
@@ -240,6 +252,13 @@ class Playout:
                         self._chunks[0] = head[take:]
                 self._buffered -= filled
                 self._played += filled
+                if filled and (self._gain != 1.0 or self._gain_to != 1.0):
+                    delta = self._gain_to - self._gain
+                    ramp = self._gain + np.sign(delta) * np.minimum(
+                        np.arange(1, filled + 1) * self._gain_step, abs(delta)
+                    )
+                    out[:filled] *= ramp.astype(np.float32)
+                    self._gain = float(ramp[-1])
                 if filled and not self._started:
                     self._started = first = True
                 if self._fade_in and filled:

@@ -35,10 +35,14 @@ stop_secs = 0.7  # was 0.2: a complete-sounding phrase ("Tell me one thing.") en
 max_silence_secs = 3.0
 max_turn_secs = 30
 wake_alone_window_s = 1.0
-barge_in_min_ms = 500  # was 250: the Kokoro voice's echo residual reached a 0.42 s run and cut a reply (2026-10-24)
+barge_in_min_ms = 400  # was 500 after a 0.42 s Kokoro echo residual run (2026-10-24); 400 now that Snow ducks about 12 dB after 150 ms of speech, so its echo has dropped before a barge-in can confirm (G-01-5, 2026-10-26)
 # Used while the echo canceller has heard under ~2 s of Snow's voice: its cold residual
 # measured up to 352 ms, so a first reply cannot cut itself off.
 barge_in_warmup_min_ms = 600
+barge_gap_ms = 150     # quiet stretch tolerated inside the user's words
+duck_after_ms = 150    # speech over Snow this long lowers its voice
+duck_gain = 0.25       # about -12 dB
+duck_release_s = 1.0   # an unconfirmed noise gives the voice back after this long
 
 [conversation]
 silence_timeout_s = 45  # inside D-08's 30-60 s, counted in audio time

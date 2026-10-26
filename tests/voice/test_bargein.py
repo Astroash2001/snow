@@ -17,6 +17,7 @@ from snow.contracts.events import (
     ReplyInterrupted,
     TranscriptFinal,
     TurnCancelled,
+    WakeDetected,
 )
 from snow.voice.pipeline import VoicePipeline
 from snow.voice.stt_groq import GroqStt
@@ -325,3 +326,54 @@ async def test_warm_up_barge_in_needs_600_ms_and_keeps_the_whole_onset(
     await until(lambda: len(of(rig.hub, TranscriptFinal)) == 2)
     pcm = np.frombuffer(rig.turn_pcm[-1], dtype=np.int16)
     assert int(np.count_nonzero(pcm == SPEECH)) == 30 * CHUNK  # every speech chunk
+
+
+async def test_the_wake_phrase_over_snow_stops_it_at_once_and_listens(
+    groq: FakeGroq,
+) -> None:
+    rig = await make_rig(groq, HoldEngine(hold_from=2))
+    turn_id = await ask(rig)
+    await start_reply(rig, turn_id, blocks=10)
+    assert rig.aborts == []
+
+    mic_before = rig.mic
+    rig.turn.on_wake(WakeHit(1.0, "t", [np.zeros(1280, dtype=np.int16)], 1280))
+    assert rig.aborts == [mic_before]  # stopped on the wake call, no more mic audio
+    await until(lambda: bool(of(rig.hub, ReplyInterrupted)))
+    await rig.pipeline._q.join()  # noqa: SLF001
+
+    cancelled = of(rig.hub, TurnCancelled)
+    assert [(c.turn_id, c.cancel_reason) for c in cancelled] == [(turn_id, "barge_in")]
+    assert len(of(rig.hub, WakeDetected)) == 2
+    assert rig.pipeline._reply is None  # noqa: SLF001
+    assert rig.pipeline._pending is None  # noqa: SLF001
+    assert of(rig.hub, PresenceState)[-1].state == "listening"
+
+    rig.hear(320, speech=True)
+    rig.hear(500, speech=False)
+    await until(lambda: len(of(rig.hub, TranscriptFinal)) == 2)
+    assert of(rig.hub, TranscriptFinal)[1].turn_id != turn_id
+
+
+async def test_speech_over_snow_ducks_it_and_an_unconfirmed_noise_gives_it_back(
+    groq: FakeGroq,
+) -> None:
+    rig = await make_rig(groq, HoldEngine(hold_from=2))
+    turn_id = await ask(rig)
+    await start_reply(rig, turn_id, blocks=10)
+    assert rig.turn.duck == rig.pipeline._playout.set_gain  # noqa: SLF001
+
+    gains: list[float] = []
+    real = rig.turn.duck
+
+    def spy(gain: float) -> None:
+        gains.append(gain)
+        real(gain)
+
+    rig.turn.duck = spy
+    rig.hear(192, speech=True)
+    assert gains == [0.25]
+    rig.hear(900, speech=False)
+    assert gains == [0.25, 1.0]
+    assert rig.aborts == []
+    assert rig.pipeline._reply is not None  # noqa: SLF001

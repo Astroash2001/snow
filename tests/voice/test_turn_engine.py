@@ -2,8 +2,9 @@
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
-from snow.voice.config import ConversationConfig
+from snow.voice.config import ConversationConfig, TurnConfig
 from snow.voice.turn import CHUNK, TurnEngine, mic_level
 from snow.voice.wake import WakeHit
 from tests.voice.conftest import voice_cfg
@@ -71,6 +72,9 @@ class Log:
 
     def on_level(self, level: float) -> None:
         self.calls.append(("level", level))
+
+    def on_barge_in(self) -> None:
+        self.calls.append(("barge_in", None))
 
 
 def make(
@@ -207,3 +211,111 @@ def test_mic_levels_only_while_listening_and_at_most_32_per_second() -> None:
 def test_mic_level_scale(amplitude: int, lo: float, hi: float) -> None:
     chunk = np.full(CHUNK, amplitude, dtype=np.int16)
     assert lo <= mic_level(chunk) <= hi
+
+
+def quiet(engine: TurnEngine, chunks: int = 1) -> None:
+    for _ in range(chunks):
+        engine.feed(np.zeros(CHUNK, dtype=np.int16))
+
+
+def test_the_wake_phrase_while_snow_speaks_cuts_it_and_listens() -> None:
+    engine, vad, log = make()
+    wake(engine)
+    speak(engine, vad)  # the turn ended: a reply is pending
+    engine.set_speaking(True)
+    quiet(engine)  # the inbox drains
+    log.calls.clear()
+    wake(engine)
+    assert [c for c in log.calls if c[0] != "level"] == [
+        ("barge_in", None),
+        ("presence", "listening"),
+        ("wake", None),
+    ]
+    feed_s(engine, 1.5)
+    assert log.count("wake_alone") == 1  # a fresh wake turn was opened
+
+
+def test_the_wake_phrase_while_thinking_is_still_ignored() -> None:
+    engine, vad, log = make()
+    wake(engine)
+    speak(engine, vad)  # a reply is pending, Snow is not audible yet
+    wake(engine)
+    assert log.count("wake") == 1
+    assert log.count("barge_in") == 0
+
+
+def over_snow() -> tuple[TurnEngine, Vad, Log, list[float]]:
+    """An engine with a reply pending and audible, and the duck gains recorded."""
+    engine, vad, log = make()
+    wake(engine)
+    speak(engine, vad)
+    engine.set_speaking(True)
+    gains: list[float] = []
+    engine.duck = gains.append
+    quiet(engine)  # the inbox drains
+    return engine, vad, log, gains
+
+
+def hear(engine: TurnEngine, vad: Vad, chunks: int, *, speech: bool) -> None:
+    vad.speech = speech
+    for _ in range(chunks):
+        engine.feed(np.zeros(CHUNK, dtype=np.int16))
+
+
+def test_a_barge_in_tolerates_a_short_gap_inside_the_words() -> None:
+    engine, vad, log, gains = over_snow()
+    hear(engine, vad, 4, speech=True)
+    hear(engine, vad, 2, speech=False)
+    hear(engine, vad, 3, speech=True)
+    assert log.count("barge_in") == 0  # 7 speech chunks: one short of 250 ms
+    hear(engine, vad, 1, speech=True)
+    assert log.count("barge_in") == 1
+    assert log.names()[-3:] == ["barge_in", "presence", "turn_start"]
+    assert gains == [0.25]
+
+
+def test_a_gap_over_150_ms_breaks_the_run() -> None:
+    engine, vad, log, gains = over_snow()
+    hear(engine, vad, 4, speech=True)
+    hear(engine, vad, 5, speech=False)
+    hear(engine, vad, 4, speech=True)
+    assert log.count("barge_in") == 0
+    assert gains == []
+
+
+def test_the_duck_comes_at_150_ms_and_is_released_after_a_second() -> None:
+    engine, vad, log, gains = over_snow()
+    hear(engine, vad, 4, speech=True)
+    assert gains == []
+    hear(engine, vad, 1, speech=True)
+    assert gains == [0.25]
+    hear(engine, vad, 26, speech=False)  # 31 chunks into the episode
+    assert gains == [0.25]
+    hear(engine, vad, 1, speech=False)  # the 32nd reaches 1.0 s
+    assert gains == [0.25, 1.0]
+    assert log.count("barge_in") == 0
+
+
+def test_a_confirmed_barge_in_ducks_but_never_releases() -> None:
+    engine, vad, log, gains = over_snow()
+    hear(engine, vad, 8, speech=True)
+    assert gains == [0.25]
+    assert log.count("barge_in") == 1
+
+
+def test_the_barge_in_turn_carries_the_run_and_a_short_lead_only() -> None:
+    engine, vad, log, _ = over_snow()
+    hear(engine, vad, 40, speech=False)
+    hear(engine, vad, 8, speech=True)
+    hear(engine, vad, 20, speech=False)
+    assert log.count("turn_end") == 2
+    assert log.turn_bytes[-1] == (8 + 10 + 7) * CHUNK * 2
+
+
+@pytest.mark.parametrize(
+    "update",
+    [{"duck_release_s": 0.5}, {"duck_gain": 0.0}, {"duck_gain": 1.5}],
+)
+def test_bad_duck_settings_fail_at_load(update: dict[str, float]) -> None:
+    with pytest.raises(ValidationError):
+        TurnConfig(**{**CFG.turn.model_dump(), **update})
