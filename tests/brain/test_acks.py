@@ -135,7 +135,8 @@ async def test_pool_refills_in_the_background_when_it_runs_low(
 async def test_empty_pool_and_every_provider_down_is_silent(
     snow_dirs: SnowDirs, memory_keyring: InMemoryKeyring, routes: Routes
 ) -> None:
-    error_route(routes, GROQ, 500)  # one failure cools groq, sparing its 2nd entry
+    for _ in range(2):  # a 5xx cools one model only, so groq's 2nd entry is tried too
+        error_route(routes, GROQ, 500)
     worker, published = make_worker(routes, memory_keyring)
     await worker.on_event(wake())
     assert not [e for e in published if isinstance(e, ReplyDelta)]

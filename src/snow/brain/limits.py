@@ -5,6 +5,8 @@ counters are per provider, not per role. A provider that answers "slow down" is 
 for exactly as long as it said (Groq `retry-after` / `x-ratelimit-reset-*`, OpenRouter
 `X-RateLimit-Reset`, Google `retryDelay`, Experiential error codes) and otherwise for a
 configured default. Times are naive local datetimes: counters reset at local midnight.
+A timeout or a 5xx cools only that provider+model pair, so the provider's other models
+are still tried in the same turn (G-01-16).
 """
 
 import re
@@ -20,6 +22,9 @@ if TYPE_CHECKING:
 
 _MAX_COOLDOWN_S = 86_400  # a provider cannot park itself for longer than a day
 _OVERLOADED_CODES = frozenset({"gateway_overloaded", "unavailable_route"})
+_MODEL_REASONS = frozenset(
+    {"timeout", "service_error"}
+)  # one slow/broken model, not a provider limit (G-01-16)
 _DURATION = re.compile(
     r"(?:(?P<h>\d+(?:\.\d+)?)h)?"
     r"(?:(?P<m>\d+(?:\.\d+)?)m(?!s))?"
@@ -93,7 +98,8 @@ class RateLimiter:
         self._now = now
         self.defaults = defaults or CooldownDefaults()
         self._usage: dict[str, _Usage] = {}
-        self._cool: dict[str, datetime] = {}
+        # str key cools the whole provider, (provider, model) cools one model.
+        self._cool: dict[str | tuple[str, str], datetime] = {}
 
     # shortcut: counters restart at zero when the brain restarts; provider 429s
     # re-teach the limits. Persist them only if double-spend is ever observed.
@@ -119,11 +125,16 @@ class RateLimiter:
     def record_failure(
         self,
         provider: str,
+        entry: "ChainEntry",
         reason: str,
         headers: Mapping[str, str],
         body: object,
     ) -> datetime | None:
-        """Start a cooldown for `provider`; returns its end (None: entry-specific)."""
+        """Start a cooldown; returns its end, or None for config_error.
+
+        Provider-wide for limits, auth and outages; only `entry`'s model for a
+        timeout or a 5xx or empty reply.
+        """
         if reason == "config_error":  # a bad parameter, not a provider-wide limit
             return None
         now = self._now()
@@ -136,7 +147,8 @@ class RateLimiter:
             if seconds is None:
                 seconds = self._default(reason, code)
             until = now + timedelta(seconds=min(seconds, _MAX_COOLDOWN_S))
-        self._cool[provider] = max(until, self._cool.get(provider, until))
+        key = (provider, entry.model) if reason in _MODEL_REASONS else provider
+        self._cool[key] = max(until, self._cool.get(key, until))
         return until
 
     def _default(self, reason: str, code: object) -> float:
@@ -186,23 +198,33 @@ class RateLimiter:
                 return seconds
         return None
 
+    def _live(self, key: str | tuple[str, str]) -> datetime | None:
+        """End of the cooldown under `key`, dropping it once expired."""
+        until = self._cool.get(key)
+        if until is not None and until <= self._now():
+            del self._cool[key]
+            return None
+        return until
+
     def cooling_until(self, provider: str, entry: "ChainEntry") -> datetime | None:
-        """When `provider` is usable again; local midnight once the entry cap is hit."""
+        """When `entry` is usable again; local midnight once the entry cap is hit."""
         now = self._now()
-        until = self._cool.get(provider)
-        if until is not None and until <= now:
-            del self._cool[provider]
-            until = None
+        live = [
+            u
+            for u in (self._live(provider), self._live((provider, entry.model)))
+            if u is not None
+        ]
+        until = max(live, default=None)
         cap = entry.daily_request_cap
         if cap is not None and self._today(provider).requests >= cap:
             until = max(until or now, next_midnight(now))
         return until
 
     def snapshot(self, provider: str) -> tuple[int, int, datetime | None]:
-        """(requests_today, tokens_today, cooling_until) for the health rows."""
+        """(requests_today, tokens_today, cooling_until) for the health rows.
+
+        `cooling_until` is the provider-wide cooldown only; a model-only cooldown
+        does not make the provider row cool.
+        """
         usage = self._today(provider)
-        until = self._cool.get(provider)
-        if until is not None and until <= self._now():
-            del self._cool[provider]
-            until = None
-        return usage.requests, usage.tokens, until
+        return usage.requests, usage.tokens, self._live(provider)
