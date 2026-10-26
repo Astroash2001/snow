@@ -335,6 +335,44 @@ async def test_timeout_cools_only_that_model(
     assert (await chain.stream(MSG)).model == "groq-1"
 
 
+@pytest.mark.parametrize(
+    ("reason", "provider_wide"),
+    [
+        ("timeout", False),
+        ("service_error", False),
+        ("rate_limit", True),
+        ("out_of_quota", True),
+        ("bad_key", True),
+        ("unreachable", True),
+    ],
+)
+def test_cooldown_scope(limiter: RateLimiter, reason: str, provider_wide: bool) -> None:
+    other = ChainEntry(provider="groq", model="other")
+    limiter.record_failure("groq", ENTRY, reason, {}, None)
+    assert limiter.cooling_until("groq", ENTRY) is not None
+    assert (limiter.cooling_until("groq", other) is not None) is provider_wide
+    assert (limiter.snapshot("groq")[2] is not None) is provider_wide
+
+
+async def test_rate_limit_still_cools_the_whole_provider(
+    make: Callable[..., LLMChain],
+    models_cfg: ModelsConfig,
+    routes: Routes,
+    events: Events,
+) -> None:
+    groq, exp = host_of(models_cfg, "groq"), host_of(models_cfg, "experiential")
+    routes.add(groq, limited(429, {"retry-after": "12"}))
+    sse_route(routes, exp, ["ok"])
+    stream = await make("fast", two_groq()).stream(MSG)
+    assert stream.provider == "experiential"
+    assert routes.count(groq) == 1
+    role = events.of("health.role")[-1]
+    assert [e.status for e in role.entries[:2]] == ["cooling_down", "cooling_down"]
+    assert all(e.cooling_until_ns for e in role.entries[:2])
+    rows = [e for e in events.of("health.provider") if e.provider == "groq"]
+    assert any(r.status == "cooling_down" and r.cooling_until_ns for r in rows)
+
+
 async def test_bad_key_costs_one_call_not_two(
     make: Callable[..., LLMChain], models_cfg: ModelsConfig, routes: Routes
 ) -> None:
