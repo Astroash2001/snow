@@ -79,12 +79,15 @@ class Log:
 
 
 def make(
-    vad: Vad | None = None, silence: float = 45.0, reply: float = 20.0
+    vad: Vad | None = None,
+    silence: float = 45.0,
+    reply: float = 20.0,
+    turn: TurnConfig | None = None,
 ) -> tuple[TurnEngine, Vad, Log]:
     vad = vad or Vad()
     log = Log()
     conv = ConversationConfig(silence_timeout_s=silence, reply_timeout_s=reply)
-    engine = TurnEngine(CFG.turn, vad, AlwaysComplete(), log, conversation=conv)  # type: ignore[arg-type]
+    engine = TurnEngine(turn or CFG.turn, vad, AlwaysComplete(), log, conversation=conv)  # type: ignore[arg-type]
     return engine, vad, log
 
 
@@ -246,18 +249,16 @@ def test_the_wake_phrase_while_thinking_is_still_ignored() -> None:
 
 
 class Over:
-    """An engine with a reply pending and audible; every duck, pause and check
-    request is recorded, and no verdict comes until the test sends one."""
+    """An engine with a reply pending and audible; every pause and check request
+    is recorded, and no verdict comes until the test sends one."""
 
-    def __init__(self) -> None:
-        self.engine, self.vad, self.log = make()
+    def __init__(self, turn: TurnConfig | None = None) -> None:
+        self.engine, self.vad, self.log = make(turn=turn)
         wake(self.engine)
         speak(self.engine, self.vad)
         self.engine.set_speaking(True)
-        self.gains: list[float] = []
         self.pauses: list[bool] = []
         self.checks: list[tuple[int, int]] = []  # (window samples, episode)
-        self.engine.duck = self.gains.append
         self.engine.pause = self.pauses.append
         self.engine.check = lambda pcm, ep: self.checks.append((len(pcm), ep))
         quiet(self.engine)  # the inbox drains
@@ -292,20 +293,30 @@ def test_a_gap_over_150_ms_breaks_the_run() -> None:
     o.talk(4)
     o.hush(5)
     o.talk(4)
-    assert o.pauses == [] and o.gains == []
+    assert o.pauses == []
 
 
-def test_speech_over_snow_ducks_at_150_ms_and_pauses_at_300_ms() -> None:
+def test_the_pause_is_the_first_and_only_reaction_at_the_trigger() -> None:
     o = Over()
-    o.talk(4)
-    assert o.gains == []
-    o.talk(1)
-    assert o.gains == [0.25]
-    o.talk(4)  # 9 chunks, 288 ms
+    assert not hasattr(o.engine, "duck")
+    o.talk(9)  # 288 ms
     assert o.pauses == []
     o.talk(1)  # 10 chunks, 320 ms
     assert o.pauses == [True]
     assert o.barge_ins() == 0 and o.checks == []
+
+
+def test_the_live_timings_pause_at_160_ms_and_have_no_duck_stage() -> None:
+    # only the fixtures' 0.2 s stop is borrowed, so Over() ends its first turn fast
+    live = load_config("voice.toml", VoiceConfig).turn.model_copy(
+        update={"stop_secs": 0.2}
+    )
+    assert {"duck_after_ms", "duck_gain"}.isdisjoint(TurnConfig.model_fields)
+    o = Over(live)
+    o.talk(4)  # 128 ms
+    assert o.pauses == []
+    o.talk(1)  # 160 ms
+    assert o.pauses == [True]
 
 
 def test_a_warming_canceller_needs_600_ms_before_the_pause() -> None:
@@ -337,35 +348,39 @@ def test_an_accepting_verdict_cuts_and_the_turn_covers_the_episode_and_lead() ->
     o.talk(1)
     names = [n for n in o.log.names() if n != "level"]
     assert names[-3:] == ["barge_in", "presence", "turn_start"]
-    assert o.pauses == [True] and o.gains == [0.25]  # the pipeline's abort ends it
+    assert o.pauses == [True]  # the pipeline's abort ends it
     o.hush(10)
     # the 40 speech chunks, 10 of lead (0.3 s), then 1 more speech and 7 quiet chunks
     assert o.log.turn_bytes[-1] == (50 + 1 + 7) * CHUNK * 2
 
 
-def test_a_rejecting_verdict_resumes_and_a_later_burst_only_ducks() -> None:
+def test_a_rejecting_verdict_resumes_and_the_hold_postpones_the_next_pause() -> None:
     o = Over()
     o.talk(40)
     o.engine.verdict(1, False)
-    o.hush(1)
-    assert o.pauses == [True, False] and o.gains == [0.25, 1.0]
+    o.hush(1)  # the verdict chunk counts down the 1 s hold (32 chunks) once
+    assert o.pauses == [True, False]
     assert o.barge_ins() == 0
     o.hush(5)
-    o.talk(10)  # inside the 5 s reject hold: a duck, never a pause
-    assert o.pauses == [True, False] and o.gains == [0.25, 1.0, 0.25]
-    o.talk(21)  # its window starts at the trigger chunk, no echo tail skipped
+    o.talk(25)  # a 25-chunk run inside the hold: never a pause
+    assert o.pauses == [True, False]
+    o.talk(1)  # chunk 32: the hold reaches 0 and the pause fires at once
+    assert o.pauses == [True, False, True]
+    o.talk(8 + 22)  # the echo tail, then a 700 ms window: check episode 2
     assert o.checks[-1] == (22 * CHUNK, 2)
     o.engine.verdict(2, True)
     o.talk(1)
     assert o.barge_ins() == 1
 
 
-def test_the_reject_hold_ends_after_five_seconds_of_audible_snow() -> None:
+def test_the_reject_hold_ends_after_one_second_of_audible_snow() -> None:
     o = Over()
     o.talk(40)
     o.engine.verdict(1, False)
-    o.hush(160)  # 5.1 s
-    o.talk(10)
+    o.hush(32)  # 1 s of audible Snow, the verdict chunk included
+    o.talk(9)
+    assert o.pauses == [True, False]
+    o.talk(1)  # the trigger chunk
     assert o.pauses == [True, False, True]
 
 
@@ -391,7 +406,7 @@ def test_a_one_word_stop_after_the_pause_is_checked_once_on_the_whole_episode() 
     assert len(o.checks) == 1
     o.engine.verdict(1, False)
     o.hush(1)
-    assert o.pauses == [True, False] and o.gains == [0.25, 1.0]
+    assert o.pauses == [True, False]
     o.talk(10)
     assert o.pauses == [True, False]  # the hold: no second pause
 
@@ -400,7 +415,7 @@ def test_a_blip_under_120_ms_is_given_back_with_no_check() -> None:
     o = Over()
     o.talk(3)
     o.hush(13)
-    assert o.checks == [] and o.pauses == [] and o.gains == []
+    assert o.checks == [] and o.pauses == []
     o.talk(3)  # a fresh episode, still no hold
     o.hush(13)
     assert o.checks == []
@@ -410,7 +425,7 @@ def test_a_pending_check_gives_the_voice_back_at_the_release() -> None:
     o = Over()
     o.talk(40)  # checked, no verdict comes
     o.talk(23)  # 63 chunks: 2.02 s from the first speech
-    assert o.pauses == [True, False] and o.gains == [0.25, 1.0]
+    assert o.pauses == [True, False]
     o.engine.verdict(1, True)  # late: ignored
     o.hush(1)
     assert o.barge_ins() == 0
@@ -421,7 +436,7 @@ def test_spaced_short_bursts_get_their_one_check_at_the_release() -> None:
     for _ in range(4):  # 56 chunks of 4 speech and 10 quiet
         o.talk(4)
         o.hush(10)
-    assert o.checks == [] and o.pauses == [] and o.gains == []
+    assert o.checks == [] and o.pauses == []
     o.talk(4)
     o.hush(3)  # 63 chunks: the release
     assert o.checks == [(63 * CHUNK, 1)]
@@ -486,17 +501,19 @@ def test_the_default_check_accepts_at_once() -> None:
     [
         {"duck_release_s": 0.5},
         {"duck_release_s": 1.5},  # under pause + echo tail + check window
-        {"duck_gain": 0.0},
-        {"duck_gain": 1.5},
-        {"duck_after_ms": 400},  # after the pause
         {"check_min_speech_ms": 400},
         {"echo_tail_ms": 0},
         {"reject_hold_s": 0.0},
+        {"reject_hold_s": 1.5},  # a held-back pause, echo tail and window need > 2 s
     ],
 )
 def test_bad_turn_settings_fail_at_load(update: dict[str, float]) -> None:
     with pytest.raises(ValidationError):
         TurnConfig(**{**CFG.turn.model_dump(), **update})
+
+
+def test_the_fixture_turn_settings_are_valid_so_the_bad_cases_are_not_vacuous() -> None:
+    TurnConfig(**CFG.turn.model_dump())
 
 
 def test_a_release_shorter_than_the_words_check_fails_at_load() -> None:

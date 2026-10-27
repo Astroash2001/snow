@@ -45,9 +45,9 @@ HEY_SNOW = Path(__file__).resolve().parents[2] / "models" / "wakeword" / "hey_sn
 def voice_cfg() -> VoiceConfig:
     """voice.toml waking on the pretrained hey_jarvis stand-in: the fixtures say
     "Hey Jarvis", and the trained hey_snow model is gitignored (CI never has it).
-    The turn-end fixtures are timed for a 0.2 s stop; the duck, pause, check and
+    The turn-end fixtures are timed for a 0.2 s stop; the pause, check and
     release keys are pinned too (300 ms pause, 250 ms echo tail, 700 ms check window,
-    120 ms short check, 400 ms quiet, 5 s reject hold, 2 s release); the live values
+    120 ms short check, 400 ms quiet, 1 s reject hold, 2 s release); the live values
     are tuned on the real mic (voice.toml)."""
     cfg = load_config("voice.toml", VoiceConfig)
     wake = cfg.wake.model_copy(update={"model": "hey_jarvis", "model_sha256": ""})
@@ -56,14 +56,12 @@ def voice_cfg() -> VoiceConfig:
             "barge_in_min_ms": 250,
             "stop_secs": 0.2,
             "barge_gap_ms": 150,
-            "duck_after_ms": 150,
-            "duck_gain": 0.25,
             "pause_after_ms": 300,
             "echo_tail_ms": 250,
             "verify_speech_ms": 700,
             "check_min_speech_ms": 120,
             "quiet_resume_ms": 400,
-            "reject_hold_s": 5.0,
+            "reject_hold_s": 1.0,
             "duck_release_s": 2.0,
         },
     )

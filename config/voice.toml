@@ -40,15 +40,13 @@ barge_in_min_ms = 400  # only the wake acknowledgement's cut-off: the next words
 # up to 352 ms, so a first reply needs this much speech before it is paused.
 barge_in_warmup_min_ms = 600
 barge_gap_ms = 150     # quiet stretch tolerated inside the user's words
-duck_after_ms = 150    # speech over Snow this long lowers its voice
-duck_gain = 0.25       # about -12 dB
-pause_after_ms = 300   # speech over Snow this long pauses it, holding the rest of the reply; plan 261026-wvr-02's hardware test tunes it
+pause_after_ms = 150   # speech over Snow this long pauses it at once with no fade, holding the rest of the reply (user request 2026-10-27); the 261026-wvr-02 hardware loopback still tunes it
 echo_tail_ms = 250     # audio this soon after a pause is left out of the check while Snow's echo dies away
 verify_speech_ms = 700 # VAD speech in the check window that starts the check (research: 0.6-1.2 s)
 check_min_speech_ms = 120  # an episode with this much speech is checked once when it goes quiet, so a one-word "Stop." is heard
 quiet_resume_ms = 400  # this long with no speech ends an episode
-reject_hold_s = 5.0    # after a rejected check, new speech only ducks Snow this long, so TV cannot make it stutter
-duck_release_s = 4.0   # an unconfirmed episode gives the voice back (duck released, pause resumed) this long after its first speech
+reject_hold_s = 1.0    # after a rejected check Snow plays at least this long before speech can pause it again, so TV or its own echo cannot make it stutter; raise it together with duck_release_s (sizing 1000 + 250 + 700 + 2000 = 3950 ms)
+duck_release_s = 4.0   # an unconfirmed episode gives the voice back (pause resumed) this long after its first speech
 
 # The check on a paused episode. A verified user stops Snow with one word, like Jarvis;
 # with no voiceprint (the degraded mode) Moonshine tiny-streaming gives no word

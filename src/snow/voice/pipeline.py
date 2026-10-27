@@ -556,8 +556,6 @@ class VoicePipeline:
                 on_render=aec.render if aec is not None else (lambda block: None),
                 stream_factory=self._stream_factory,
             )
-            # the user talking over Snow lowers its voice (audio thread -> playout lock)
-            self._engine.duck = self._playout.set_gain
             self._engine.pause = self._pause
         self._tts_ready.set()  # no playout: no voice loaded, replies stay silent
 
