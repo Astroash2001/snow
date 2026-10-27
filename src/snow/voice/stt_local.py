@@ -98,6 +98,9 @@ class LocalStt:
 
             path, arch = get_model_for_language("en", self._arch, cache_root=self._dir)
             transcriber = Transcriber(path, arch)
+            # The first one-shot call costs ~1.3 s (measured); pay it here, not in a
+            # barge-in check that has a deadline.
+            self._words(transcriber, np.zeros(self._rate // 2, dtype=np.int16))
         except Exception:
             log.exception("local_stt_unavailable")
             self._drain_failed()
@@ -122,7 +125,8 @@ class LocalStt:
                     )
                 elif kind == "transcribe":
                     window, done = arg
-                    done.set_result(self._words(transcriber, window))
+                    if not done.done():  # the caller may have timed out already
+                        done.set_result(self._words(transcriber, window))
                 elif kind == "finish":
                     arg.set_result(self._final(stream))
                     stream = None

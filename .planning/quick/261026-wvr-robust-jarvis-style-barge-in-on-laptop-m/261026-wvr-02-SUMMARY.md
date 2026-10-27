@@ -127,3 +127,10 @@ None beyond the plan's register. T-wvr-06..SC mitigations are in place: score th
 
 - src/snow/voice/speaker.py, src/snow/voice/enroll.py, tests/voice/test_speaker.py, tests/voice/test_enroll.py, tests/hardware/test_bargein_loopback.py exist
 - commits b7c722e, 02a4de8, 28edb18 are ancestors of HEAD
+
+## Orchestrator hardware run (2026-10-27, night, Snow quit, default in: Microphone Array, out: FxSound Speakers)
+
+- Run 1: 3 passed (Snow alone, noise scenarios: zero confirmed barge-ins), positive control failed: the words check timed out (`local_stt_failed kind=InvalidStateError`; one-shot Moonshine took 1.3 s cold, up to 0.9 s busy, against `timeout_s` 1.0).
+- Fix (orchestrator commit after this note): Moonshine one-shot warm-up at load, `barge_check.timeout_s` 2.0, `duck_release_s` 4.0, no `set_result` on a timed-out future.
+- Run 2: 3 passed, 1 skipped; positive control did not pause at all (speaker-to-mic coupling of the replayed clip too weak at night volume through FxSound). Inconclusive, not evidence against the gate; the user's live check (a)-(f) decides.
+- Note: the default output is the FxSound virtual device (an audio enhancer). It may cause the voice "flutter" (UAT test 5) and adds non-linear processing that weakens echo cancellation; try Snow with FxSound bypassed.

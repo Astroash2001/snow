@@ -48,7 +48,7 @@ verify_speech_ms = 700 # VAD speech in the check window that starts the check (r
 check_min_speech_ms = 120  # an episode with this much speech is checked once when it goes quiet, so a one-word "Stop." is heard
 quiet_resume_ms = 400  # this long with no speech ends an episode
 reject_hold_s = 5.0    # after a rejected check, new speech only ducks Snow this long, so TV cannot make it stutter
-duck_release_s = 3.0   # an unconfirmed episode gives the voice back (duck released, pause resumed) this long after its first speech
+duck_release_s = 4.0   # an unconfirmed episode gives the voice back (duck released, pause resumed) this long after its first speech
 
 # The check on a paused episode. A verified user stops Snow with one word, like Jarvis;
 # with no voiceprint (the degraded mode) Moonshine tiny-streaming gives no word
@@ -58,7 +58,7 @@ min_words_verified = 1
 min_words_unverified = 2
 echo_match = 0.6       # a check whose words are this much Snow's own last words is an echo
 echo_window_s = 10     # Snow's own words from this far back count
-timeout_s = 1.0        # the local words check is given this long, then it fails closed
+timeout_s = 2.0        # the local words check is given this long, then it fails closed (one-shot Moonshine measured 0.4-0.9 s warm, 2026-10-27)
 
 # Speaker verification (VOIC-07 groundwork): TitaNet-small through sherpa-onnx tells the
 # user's voice from the TV, other people and Snow's own voice. The voiceprint is made by
