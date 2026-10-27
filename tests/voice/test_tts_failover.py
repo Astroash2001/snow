@@ -24,7 +24,7 @@ from snow.contracts.events import (
 )
 from snow.voice.tts.base import EngineError, EngineLoadError
 from snow.voice.tts.config import TtsConfig
-from snow.voice.tts.kokoro import KokoroEngine, _ensure
+from snow.voice.tts.kokoro import KokoroEngine, ensure_pinned
 from snow.voice.tts.router import VoiceRouter
 from tests.voice.conftest import FakeHub, StubSource, make_pipeline, until
 from tests.voice.test_cartesia import MockCartesia, World, mock  # noqa: F401
@@ -317,7 +317,7 @@ def test_a_downloaded_file_that_fails_its_checksum_is_never_kept_or_loaded(
     monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout: Reply())
     dest = tmp_path / "model.onnx"
     with pytest.raises(ValueError, match="SHA-256"):
-        _ensure("https://example.invalid/model.onnx", "0" * 64, dest)
+        ensure_pinned("https://example.invalid/model.onnx", "0" * 64, dest)
     assert not dest.exists() and not list(tmp_path.iterdir())
 
     engine = KokoroEngine(TTS_CFG.engines.kokoro, models_dir=tmp_path)
@@ -330,7 +330,9 @@ def test_a_downloaded_file_that_fails_its_checksum_is_never_kept_or_loaded(
 
 def test_a_plain_http_model_url_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="https"):
-        _ensure("http://example.invalid/model.onnx", "0" * 64, tmp_path / "m.onnx")
+        ensure_pinned(
+            "http://example.invalid/model.onnx", "0" * 64, tmp_path / "m.onnx"
+        )
 
 
 async def test_kokoro_that_was_not_loaded_cannot_speak() -> None:

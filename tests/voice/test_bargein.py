@@ -22,7 +22,7 @@ from snow.contracts.events import (
     TurnCancelled,
     WakeDetected,
 )
-from snow.voice.pipeline import VoicePipeline
+from snow.voice.pipeline import SpeakerCheck, VoicePipeline
 from snow.voice.stt_groq import GroqStt
 from snow.voice.tts.router import VoiceRouter
 from snow.voice.turn import CHUNK, TurnEngine
@@ -143,7 +143,11 @@ class TimedSpeaker(Speaker):
 
 
 async def make_rig(
-    groq: FakeGroq, voice: FakeEngine, *, echo_cancel: bool = False
+    groq: FakeGroq,
+    voice: FakeEngine,
+    *,
+    echo_cancel: bool = False,
+    speaker: SpeakerCheck | None = None,
 ) -> Rig:
     groq.text = "what time is it"
     hub, vad = FakeHub(), Vad()
@@ -164,6 +168,7 @@ async def make_rig(
         "voice",
         local=local,
         echo_cancel=echo_cancel,
+        speaker=speaker,
     )
     pipeline._tone.analyze = lambda *a: None  # type: ignore[method-assign,assignment]  # noqa: SLF001
     rig: Rig

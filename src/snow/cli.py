@@ -16,6 +16,7 @@ COMMANDS: dict[str, str] = {
     "dev probe-models": "snow.brain.probe:main",
     "dev audition-voices": "snow.voice.audition:main",
     "dev record-negatives": "snow.voice.record_negatives:main",
+    "dev enroll-voice": "snow.voice.enroll:main",
 }
 
 

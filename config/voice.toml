@@ -60,6 +60,29 @@ echo_match = 0.6       # a check whose words are this much Snow's own last words
 echo_window_s = 10     # Snow's own words from this far back count
 timeout_s = 1.0        # the local words check is given this long, then it fails closed
 
+# Speaker verification (VOIC-07 groundwork): TitaNet-small through sherpa-onnx tells the
+# user's voice from the TV, other people and Snow's own voice. The voiceprint is made by
+# `snow dev enroll-voice` and kept DPAPI-wrapped under %LOCALAPPDATA%\Snow, never in the repo.
+# With no voiceprint Snow stays in the degraded words-only mode of [barge_check].
+[speaker]
+model_url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx"
+model_sha256 = "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e"
+threshold = 0.35       # cosine to accept; enroll-voice stores a calibrated value (0.30-0.60)
+min_threshold = 0.30
+max_threshold = 0.60
+min_margin = 0.15      # enroll-voice refuses to save when the user and Snow's voice sit closer than this
+# Spoken only by the dev tool `snow dev enroll-voice` (as its calibration signal, and read
+# aloud by the user), never on Snow's reply path (SPCH-01): the same exception as the
+# audition_line in tts.toml. About 25 s read aloud; plain, phonetically varied English.
+calibration_lines = [
+    "The quick brown fox jumps over the lazy dog near the old stone bridge.",
+    "Please open the window and tell me what the weather looks like this morning.",
+    "Seven large boxes were carried up three flights of stairs before noon.",
+    "She sells shells by the shore while the children chase the waves.",
+    "Could you check whether the meeting has moved to Thursday afternoon?",
+    "We walked along the river until the evening light turned everything gold.",
+]
+
 [conversation]
 silence_timeout_s = 45  # inside D-08's 30-60 s, counted in audio time
 reply_timeout_s = 20    # stop waiting for a reply that never comes

@@ -128,7 +128,7 @@ def test_snow_alone_on_speakers_is_not_heard_by_itself(rig: Rig) -> None:
         f"ERLE {erle:.1f} dB < {ERLE_MIN_DB} dB. Measure the real loopback delay, then "
         "retry with FxSound effects off or another output (research pitfalls 3 and 4)"
     )
-    assert run < CFG.turn.barge_in_min_ms, f"residual run {run} ms barges in on Snow"
+    assert run < CFG.turn.pause_after_ms, f"residual run {run} ms barges in on Snow"
 
 
 def test_talking_over_snow_on_speakers_still_gets_through(rig: Rig) -> None:
@@ -145,7 +145,7 @@ def test_talking_over_snow_on_speakers_still_gets_through(rig: Rig) -> None:
         f"{longest_run_ms(raw)} ms; clean {db(clean):.1f} dBFS, "
         f"longest VAD run {run} ms"
     )
-    assert run >= CFG.turn.barge_in_min_ms, (
+    assert run >= CFG.turn.pause_after_ms, (
         "your voice did not get through the canceller"
     )
     rig.drained.wait(10)
