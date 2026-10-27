@@ -34,12 +34,12 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _ensure(url: str, sha256: str, dest: Path) -> Path:
+def ensure_pinned(url: str, sha256: str, dest: Path) -> Path:
     """`dest` if it matches the pin, else fetched (https only) and verified first."""
     if dest.is_file() and _sha256(dest) == sha256.lower():
         return dest
     if not url.startswith("https://"):
-        raise ValueError("kokoro model_url must be https")
+        raise ValueError("model url must be https")
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(dest.suffix + ".part")
     with urllib.request.urlopen(url, timeout=60) as r, part.open("wb") as f:  # noqa: S310 - https checked above
@@ -47,7 +47,7 @@ def _ensure(url: str, sha256: str, dest: Path) -> Path:
             f.write(block)
     if _sha256(part) != sha256.lower():
         part.unlink()
-        raise ValueError("downloaded kokoro file failed its SHA-256 check")
+        raise ValueError("downloaded model file failed its SHA-256 check")
     os.replace(part, dest)
     return dest
 
@@ -69,10 +69,10 @@ class KokoroEngine:
             import onnxruntime as ort  # noqa: PLC0415 - heavy, only when this engine loads
             from kokoro_onnx import Kokoro  # noqa: PLC0415
 
-            model = _ensure(
+            model = ensure_pinned(
                 c.model_url, c.model_sha256, self._dir / c.model_url.rsplit("/", 1)[-1]
             )
-            voices = _ensure(
+            voices = ensure_pinned(
                 c.voices_url,
                 c.voices_sha256,
                 self._dir / c.voices_url.rsplit("/", 1)[-1],

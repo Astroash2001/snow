@@ -10,6 +10,7 @@ from snow.logging import configure
 from snow.voice.config import VoiceConfig
 from snow.voice.pipeline import build_pipeline
 from snow.voice.sources import MicSource
+from snow.voice.speaker import SpeakerVerifier
 from snow.voice.stt_groq import GroqStt
 from snow.voice.stt_local import LocalStt
 from snow.voice.tts.base import EngineName, TtsEngine
@@ -51,6 +52,7 @@ async def _main() -> None:
         tts=engines,  # the router loads only the engines tts.toml enables
         tts_cfg=tts_cfg,
         echo_cancel=tts_cfg.playout.echo_cancellation,
+        speaker=SpeakerVerifier(cfg.speaker),
     )
     mic.on_health = pipeline.mic_health
     client.on_event = pipeline.on_hub_event

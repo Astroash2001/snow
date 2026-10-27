@@ -152,6 +152,32 @@ class ToneConfig(_Strict):
     wait_s: float = 0.3  # the transcript waits at most this long for the tone
 
 
+class SpeakerConfig(_Strict):
+    """Speaker verification for the barge-in check (TitaNet-small, sherpa-onnx)."""
+
+    model_url: str  # https only; fetched once into models/speaker/
+    model_sha256: str  # the file is refused unless it matches
+    threshold: float  # used until `snow dev enroll-voice` stores a calibrated one
+    min_threshold: float  # a calibrated threshold is clamped into this range
+    max_threshold: float
+    min_margin: float  # enrollment refuses when genuine p5 minus impostor max is below
+    calibration_lines: list[str]  # read aloud while enrolling (dev tool only)
+
+    @model_validator(mode="after")
+    def _is_sane(self) -> Self:
+        if not self.model_url.startswith("https://"):
+            raise ValueError("speaker.model_url must be https")
+        if not self.min_threshold <= self.threshold <= self.max_threshold:
+            raise ValueError(
+                "speaker.threshold must lie within min_threshold and max_threshold"
+            )
+        if self.min_margin <= 0:
+            raise ValueError("speaker.min_margin must be above 0")
+        if not any(line.strip() for line in self.calibration_lines):
+            raise ValueError("speaker.calibration_lines must not be empty")
+        return self
+
+
 class VoiceConfig(_Strict):
     audio: AudioConfig
     wake: WakeConfig
@@ -161,6 +187,7 @@ class VoiceConfig(_Strict):
     stt: SttConfig
     tone: ToneConfig
     barge_check: BargeCheckConfig
+    speaker: SpeakerConfig
 
     @model_validator(mode="after")
     def _release_covers_the_words_check(self) -> Self:

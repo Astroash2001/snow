@@ -55,6 +55,7 @@ from snow.voice.wake import WakeGate, WakeHit
 
 log = logging.getLogger("snow.voice")
 
+_NOT_THE_USER = -1.0  # a speaker score below every threshold: the check fails closed
 _LEAD_IN_FRAMES = (
     8  # 640 ms kept so a follow-on turn's first word reaches the local model
 )
@@ -78,6 +79,22 @@ class LocalSource(Protocol):
     def cancel(self) -> None: ...
 
     def transcribe(self, pcm: Frame) -> "Future[str]": ...
+
+
+class SpeakerCheck(Protocol):
+    """The speaker verifier (`SpeakerVerifier`, or a fake in tests)."""
+
+    @property
+    def enrolled(self) -> bool: ...
+
+    @property
+    def threshold(self) -> float: ...
+
+    def voiceprint_on_disk(self) -> bool: ...
+
+    def load(self) -> None: ...
+
+    def score(self, pcm: Frame) -> float | None: ...
 
 
 @dataclass
@@ -124,6 +141,7 @@ class VoicePipeline:
         tts_cfg: TtsConfig | None = None,
         stream_factory: StreamFactory | None = None,
         echo_cancel: bool = False,
+        speaker: SpeakerCheck | None = None,
     ) -> None:
         self._cfg = cfg
         self._hub = hub
@@ -183,6 +201,7 @@ class VoicePipeline:
         # What Snow said lately (monotonic time, text), for the barge-in echo filter.
         # Loop thread only.
         self._said: deque[tuple[float, str]] = deque(maxlen=64)
+        self._speaker = speaker
         engine.check = self._request_check
 
     @property
@@ -208,6 +227,8 @@ class VoicePipeline:
         if self._tts is not None:
             self._tts.start()
             self._spawn(self._load_tts(self._tts))
+            if self._speaker is not None:
+                self._spawn(self._load_speaker(self._speaker))
         self._muted = not listen
         if listen:
             self._open_source()
@@ -540,6 +561,22 @@ class VoicePipeline:
             self._engine.pause = self._pause
         self._tts_ready.set()  # no playout: no voice loaded, replies stay silent
 
+    async def _load_speaker(self, speaker: SpeakerCheck) -> None:
+        """Load the verifier off the loop. Until it is up (or if it never loads) a PC
+        with a voiceprint rejects every barge-in check: the wake phrase still stops
+        Snow."""
+        try:
+            await asyncio.to_thread(speaker.load)
+        except Exception as e:  # noqa: BLE001 - network, checksum, disk and library errors
+            log.error("speaker_verify unavailable kind=%s", type(e).__name__)
+            return
+        if speaker.enrolled:
+            log.info("speaker_verify on threshold=%.2f", speaker.threshold)
+        elif speaker.voiceprint_on_disk():
+            log.error("speaker_verify unavailable kind=voiceprint_unreadable")
+        else:
+            log.info("speaker_verify off reason=not_enrolled")
+
     def _hop(self, fn: Callable[..., None], *args: object) -> None:
         """Audio thread -> event loop."""
         assert self._loop is not None  # noqa: S101
@@ -560,28 +597,58 @@ class VoicePipeline:
         no local model, a timeout or an error means no words, so noise never cuts Snow
         (the wake phrase still does). Logs the reason and numbers, never words."""
         check = self._cfg.barge_check
+        speaker = self._speaker
+        score: float | None = None  # None: no voiceprint, the degraded words-only mode
+        threshold = 0.0
         heard = ""
-        if self._local is not None:
-            try:
-                heard = await asyncio.wait_for(
-                    asyncio.wrap_future(self._local.transcribe(window)),
-                    check.timeout_s,
-                )
-            except Exception:  # noqa: BLE001 - TimeoutError, a missing model, a bad window
-                heard = ""
+        if speaker is not None and speaker.voiceprint_on_disk():
+            if speaker.enrolled:
+                threshold = speaker.threshold
+                heard, score = await self._words_and_score(window, speaker)
+            else:  # enrolled but not loaded (yet): fail closed
+                threshold, score = self._cfg.speaker.threshold, _NOT_THE_USER
+        else:
+            heard = await self._words(window)
         horizon = time.monotonic() - check.echo_window_s
         said = " ".join(text for at, text in self._said if at >= horizon)
-        # shortcut: no voiceprint yet (plan 261026-wvr-02), so the degraded mode runs
-        reason = decide(None, 0.0, heard, said, check)
+        reason = decide(score, threshold, heard, said, check)
         log.info(
             "barge_check episode=%d reason=%s score=%s words=%d echo=%.2f",
             episode,
             reason,
-            None,
+            None if score is None else round(score, 2),
             len(words(heard)),
             echo_ratio(heard, said),
         )
         self._engine.verdict(episode, reason == "ok")
+
+    async def _words(self, window: Frame) -> str:
+        """What the local model hears in `window`; "" on a missing model, a timeout or
+        an error, so the check fails closed."""
+        if self._local is None:
+            return ""
+        try:
+            return await asyncio.wait_for(
+                asyncio.wrap_future(self._local.transcribe(window)),
+                self._cfg.barge_check.timeout_s,
+            )
+        except Exception:  # noqa: BLE001 - TimeoutError, a missing model, a bad window
+            return ""
+
+    async def _words_and_score(
+        self, window: Frame, speaker: SpeakerCheck
+    ) -> tuple[str, float]:
+        """The words and the speaker score at once; an error means not the user."""
+        heard, score = await asyncio.gather(
+            self._words(window),
+            asyncio.to_thread(speaker.score, window),
+            return_exceptions=True,
+        )
+        if isinstance(score, BaseException) or score is None:
+            kind = type(score).__name__ if isinstance(score, BaseException) else "None"
+            log.error("speaker_score_failed kind=%s", kind)
+            score = _NOT_THE_USER
+        return ("" if isinstance(heard, BaseException) else heard), score
 
     def _begin(self, turn_id: str | None) -> _Reply:
         reply = self._reply
@@ -874,6 +941,7 @@ def build_pipeline(
     tts_cfg: TtsConfig | None = None,
     stream_factory: StreamFactory | None = None,
     echo_cancel: bool = False,
+    speaker: SpeakerCheck | None = None,
 ) -> VoicePipeline:
     """Real wake gate, VAD and Smart Turn wired to `source` (worker and dev tool)."""
     rate, w = cfg.audio.sample_rate, cfg.wake
@@ -906,4 +974,5 @@ def build_pipeline(
         tts_cfg,
         stream_factory,
         echo_cancel,
+        speaker,
     )
