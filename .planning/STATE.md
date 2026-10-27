@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Always-On Voice Loop
 status: executing
 stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-10-27T13:44:00.826Z"
+last_updated: "2026-10-27T15:49:00.719Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase 01 execution started
-state_head: 085173000a35c8e6663d8272db139ec3532b0b94
+state_head: 9255bc9b004d4608f7cdac0ae0d687de818f33a8
 progress:
   total_phases: 7
   completed_phases: 0
@@ -90,6 +90,7 @@ None yet.
 | 261026-nvh | Per-model cooldown: a model timeout no longer skips its provider's other models (UAT G-01-16) | 2026-10-26 | cb6968a | [261026-nvh-per-model-cooldown-so-one-slow-model-doe](./quick/261026-nvh-per-model-cooldown-so-one-slow-model-doe/) |
 | 261026-nui | Snappy interruption: Hey Snow stops Snow at once, duck at 150 ms, gap-tolerant 400 ms barge-in, Jarvis answer rules (UAT G-01-5) | 2026-10-26 | 9f8ae7b | [261026-nui-snappy-jarvis-alexa-interruption-and-jar](./quick/261026-nui-snappy-jarvis-alexa-interruption-and-jar/) |
 | 261026-wvr | Robust Jarvis barge-in: pause first, words + echo check, TitaNet speaker verification, enroll-voice, loopback suite (hardware run pending) | 2026-10-27 | 0851730 | [261026-wvr-robust-jarvis-style-barge-in-on-laptop-m](./quick/261026-wvr-robust-jarvis-style-barge-in-on-laptop-m/) |
+| 261027-rx2 | Instant fade-free stop on the user's voice; brain remembers only what was heard and that it was interrupted | 2026-10-27 | 9255bc9 | [261027-rx2-instant-stop-on-the-user-s-voice-plus-in](./quick/261027-rx2-instant-stop-on-the-user-s-voice-plus-in/) |
 
 ## Deferred Items
 
