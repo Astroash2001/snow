@@ -163,6 +163,24 @@ def midstream_error_route(routes: Routes, host: str, chunks: list[str]) -> None:
     )
 
 
+def stall_route(routes: Routes, host: str, chunks: list[str]) -> None:
+    """A 200 stream that delivers `chunks` as text and then never ends."""
+    ok = openai_sse(chunks).content.decode()
+    cut = ok[: ok.index('"finish_reason": "stop"')]
+    cut = cut[: cut.rindex("data: ")]
+
+    async def body() -> AsyncIterator[bytes]:
+        yield cut.encode()
+        await asyncio.Event().wait()
+
+    routes.add(
+        host,
+        httpx2.Response(
+            200, headers={"content-type": "text/event-stream"}, content=body()
+        ),
+    )
+
+
 def hang_route(routes: Routes, host: str) -> None:
     async def hang() -> httpx2.Response:
         await asyncio.sleep(30)

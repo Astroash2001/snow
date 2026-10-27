@@ -403,29 +403,19 @@ async def test_the_wake_phrase_over_snow_stops_it_at_once_and_listens(
     assert of(rig.hub, TranscriptFinal)[1].turn_id != turn_id
 
 
-async def test_speech_over_snow_ducks_it_and_an_unconfirmed_noise_gives_it_back(
+async def test_a_short_unconfirmed_noise_leaves_snow_playing_and_is_checked_once(
     groq: FakeGroq,
 ) -> None:
     rig = await make_rig(groq, HoldEngine(hold_from=2))
     turn_id = await ask(rig)
     await start_reply(rig, turn_id, blocks=10)
-    assert rig.turn.duck == rig.pipeline._playout.set_gain  # noqa: SLF001
     rig.local.heard = ""  # nothing intelligible
 
-    gains: list[float] = []
-    real = rig.turn.duck
-
-    def spy(gain: float) -> None:
-        gains.append(gain)
-        real(gain)
-
-    rig.turn.duck = spy
-    rig.hear(192, speech=True)
-    assert gains == [0.25]
+    rig.hear(192, speech=True)  # 192 ms: under the fixture's 300 ms pause trigger
+    assert not rig.pipeline._playout._paused  # noqa: SLF001
     rig.hear(16 * 32, speech=False)  # quiet: the 6-chunk episode is checked
     await verdict_in(rig)
     rig.hear(32, speech=False)
-    assert gains == [0.25, 1.0]
     assert rig.local.windows == [19 * CHUNK]
     assert rig.aborts == []
     assert rig.pipeline._reply is not None  # noqa: SLF001

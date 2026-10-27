@@ -10,8 +10,7 @@ milliseconds, waits until `rebuffer_ms` is queued or the clause is complete, and
 back in, instead of playing silence gaps for the rest of the reply. The synthesis
 real-time factor (RTF, EWMA over clauses) is tracked from `clause_done`; above
 `hold_rtf` each clause starts only once it is fully synthesized. Fades are applied to
-the block before `on_render`, so the echo reference equals what is played. So is the
-barge-in duck gain (`set_gain`).
+the block before `on_render`, so the echo reference equals what is played.
 
 `set_paused` holds the reply: the gain ramps to 0 over 30 ms, then nothing is taken from
 the queue, so `played` stays truthful for `_Reply.heard()` and the rest resumes from the
@@ -40,8 +39,8 @@ _FLOOR_DB = -60.0
 _FADE_S = 0.005
 # Weight of the newest clause: the EWMA follows a load change within two clauses.
 _RTF_ALPHA = 0.5
-# a full 1.0 gain swing takes 30 ms: instant to the ear, too slow to click
-_DUCK_RAMP_S = 0.03
+# the pause ramp: a full 1.0 swing takes 30 ms, instant to the ear, too slow to click
+_RAMP_S = 0.03
 
 
 class OutputStream(Protocol):
@@ -133,7 +132,7 @@ class Playout:
             0  # reset by start_utterance only, so the pipeline can read it after
         )
         self._block = int(sample_rate * _BLOCK_S)
-        self._gain_step = 1.0 / (sample_rate * _DUCK_RAMP_S)  # per sample
+        self._gain_step = 1.0 / (sample_rate * _RAMP_S)  # per sample
         self.on_first_audio = on_first_audio
         self.on_level = on_level
         self.on_drained = on_drained
@@ -156,8 +155,7 @@ class Playout:
         self._threshold = self._prebuffer  # queued samples that start (or resume) play
         self._fade_in = False
         self._clause = 0  # samples pushed since the last clause boundary
-        self._gain = 1.0  # level now (ramps) and the level it ramps to
-        self._gain_to = 1.0
+        self._gain = 1.0  # level now; ramps to 0 while paused, back to 1
         self._paused = False
 
     @property
@@ -171,12 +169,6 @@ class Playout:
         return self._played
 
     # --- event loop side ----------------------------------------------------------
-
-    def set_gain(self, gain: float) -> None:
-        """Thread-safe: ramp Snow's voice toward `gain` (barge-in duck); `abort` and
-        the next utterance reset it to 1.0."""
-        with self._lock:
-            self._gain_to = gain
 
     def set_paused(self, paused: bool) -> None:
         """Thread-safe: hold the reply (ramp to silence, keep the rest queued) or
@@ -252,7 +244,7 @@ class Playout:
         with self._lock:
             filled = 0
             paused = self._paused
-            target = 0.0 if paused else self._gain_to
+            target = 0.0 if paused else 1.0
             # silent and held: take nothing, so `played` and the queue stand still
             if self._playing and not (paused and self._gain == 0.0):
                 while filled < frames and self._chunks:

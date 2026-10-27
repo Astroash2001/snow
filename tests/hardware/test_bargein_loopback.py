@@ -154,7 +154,6 @@ class ArmableMic:
 class Stats:
     reply: int = 0  # the index of the reply being spoken
     pauses: list[int] = field(default_factory=list[int])  # reply index per pause
-    ducks: list[int] = field(default_factory=list[int])  # reply index per duck
     checks: int = 0
     ok: int = 0
     rejected: int = 0
@@ -259,7 +258,6 @@ class Rig:
         scores = [sc for _, sc in s.reasons if sc != "None"]
         print(
             f"[{self.state}] {title}: pauses {len(s.pauses)} (per reply {s.pauses}), "
-            f"ducks {len(s.ducks)} (per reply {s.ducks}), "
             f"checks {s.checks}, verdicts ok {s.ok} / rejected {s.rejected}, "
             f"reasons {by_reason}, speaker scores {scores}, "
             f"cut offs {self.interrupted()}, replies completed {self.spoken()}, "
@@ -355,14 +353,6 @@ async def running(
             pause(paused)
 
         engine.pause = spy_pause
-        duck = engine.duck
-
-        def spy_duck(gain: float) -> None:
-            if gain < 1.0:
-                stats.ducks.append(stats.reply)
-            duck(gain)
-
-        engine.duck = spy_duck
         await asyncio.sleep(1.5)  # the microphone settles before anything plays
         yield Rig(pipeline, hub, mic, room, stats, state)
         assert not groq.violations, f"requests to unrouted hosts: {groq.violations}"
