@@ -248,3 +248,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 | 5. PC Control | 0/TBD | Not started | - |
 | 6. Glass-box HUD & Jarvis Body | 0/TBD | Not started | - |
 | 7. Production Release | 0/TBD | Not started | - |
+
+## Backlog
+
+### Phase 999.1: Kokoro voice on the GPU (BACKLOG)
+
+**Goal:** [Captured for future planning] Optional, only when the user asks. Kokoro fp32 now runs on the CPU with 10 of 16 threads (config/tts.toml `threads = 10`, commit b158c74): RTF about 0.77, 0 underruns, but it loads the CPU briefly while Snow speaks and is near real time under load. Moving Kokoro to the RTX 4050 (its own process and uv env with onnxruntime-gpu, like engines/chatterbox, because pipecat pins CPU onnxruntime) keeps the same bm_daniel voice, cuts CPU use to about one core and gives much faster first audio. Verify with an earshot A/B against the CPU render. Estimate: half a day.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
