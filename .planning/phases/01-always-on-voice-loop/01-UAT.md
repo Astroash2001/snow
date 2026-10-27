@@ -8,11 +8,11 @@ updated: 2026-10-25T10:40:00Z
 
 ## Current Test
 
-number: 4
-name: Live words while speaking
+number: 7
+name: Go to sleep
 expected: |
-  While you say a long sentence slowly, a live row fills in with your words as you
-  talk, then settles into the final line when you stop.
+  Say "that's all" in a conversation: Snow ends it. Then say "Hey Snow, go to sleep".
+  Snow stops listening for follow-ups but still wakes on "Hey Snow".
 awaiting: user response
 
 ## Tests
@@ -33,18 +33,24 @@ note: Three follow-ups without a wake word answered (01:14 session); the user en
 
 ### 4. Live words while speaking
 expected: While you say a long sentence slowly, a live row in the dashboard fills in with your words as you talk, then settles into the final line when you stop.
-result: issue
+result: pass
+retest: "yes" after ae94081 (whole question waited for)
 reported: "no it stopped hearing mid way and started giving answer"
 severity: major
 fix_note: "Turn ended after 0.2 s of silence on the complete-sounding 'Tell me one thing.'; stop_secs raised to 0.7 in ae94081. Re-test pending; the live row itself was not observed."
 
 ### 5. Interrupting Snow
 expected: Ask "Hey Snow, tell me a long story about space." While Snow is speaking, talk over it for about a second. Snow stops at once, the cut-off reply is dimmed with an Interrupted chip, and Snow answers what you said instead.
-result: [pending]
+result: pass
+retest: "yes it works fine" (2026-10-28) after quick tasks 261026-wvr (speaker-verified barge-in), 261027-rx2 (instant stop, interruption-aware brain) and Kokoro 10 threads (flutter)
+reported: "At times it did not identify the clear instruction which I gave (said 'You are pathetic', heard 'I just hope I enjoyed it'; 'moon' heard as 'moving'/'wing'). The interruption in between while speaking is not as fluid as it should be. The voice is a bit jittery when having a long conversation at the end. I think 0.9 speed would be a good option."
+severity: major
+note: "Barge-in itself works (four Interrupted replies, 15:19-15:20). Speed set to 0.9 inline."
 
 ### 6. Mute by voice, unmute by button
 expected: Say "Hey Snow, mute". The Windows microphone indicator turns off, a Muted banner shows, and talking does nothing. Click Unmute in the dashboard: the mic indicator comes back and "Hey Snow" works again.
-result: [pending]
+result: pass
+note: "User: everything else is also good (speed 0.9 confirmed). New request logged under test 5: Alexa-snappy interruption."
 
 ### 7. Go to sleep
 expected: Say "that's all" in a conversation: Snow ends it. Then say "Hey Snow, go to sleep". Snow stops listening for follow-ups (orb in its sleeping state) but still wakes on "Hey Snow".
@@ -97,16 +103,16 @@ severity: major
 ## Summary
 
 total: 16
-passed: 4
-issues: 3
-pending: 7
+passed: 7
+issues: 1
+pending: 5
 skipped: 2
 
 ## Gaps
 
 - gap_id: G-01-15
   truth: "The You row shows only words the user said"
-  status: failed
+  status: resolved
   reason: "User reported: Sometimes it identifies my words as wrong: the clear words that I am not saying."
   severity: major
   test: 15
@@ -141,7 +147,7 @@ skipped: 2
 
 - gap_id: G-01-4
   truth: "A mid-thought pause does not end the user's turn"
-  status: failed
+  status: resolved
   reason: "User reported: no it stopped hearing mid way and started giving answer"
   severity: major
   test: 4
@@ -152,3 +158,20 @@ skipped: 2
   missing: []
   debug_session: ""
   fix_note: "stop_secs 0.7 inline (ae94081); costs about 0.5 s per reply. Needs the user's re-test."
+
+- gap_id: G-01-5
+  truth: "Talking over Snow stops it smoothly and Snow hears the new words right; the voice stays smooth through a long conversation"
+  status: resolved
+  reason: "User reported: misheard words when interrupting ('You are pathetic' -> 'I just hope I enjoyed it', 'moon' -> 'moving'/'wing'); interruption not fluid; voice jittery late in a long conversation"
+  severity: major
+  test: 5
+  root_cause: "Partly diagnosed. (a) Misheard words came in barge-in turns: the turn's audio starts while Snow is still talking, so residual echo of Snow's voice mixes with the user's words before Groq Whisper. (b) A barge-in needs 500 ms of continuous speech (raised from 250 after Snow cut itself off), which feels slow. (c) Jitter: playout logs show 0 underruns and RTF 0.36-0.54, so it is not synthesis starvation; cause not yet known."
+  artifacts:
+    - path: "config/voice.toml"
+      issue: "barge_in_min_ms 500"
+    - path: "src/snow/voice/pipeline.py"
+      issue: "barge-in turn audio includes Snow's echo residue"
+  missing:
+    - "Speaker verification (Phase 2) so barge-in can be faster and Snow's own voice is ignored"
+    - "Identify the jitter (user description needed)"
+  debug_session: ""
