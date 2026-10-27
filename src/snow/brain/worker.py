@@ -32,6 +32,7 @@ from snow.brain.limits import RateLimiter
 from snow.brain.persona import (
     Fact,
     History,
+    MarkFilter,
     PersonaConfig,
     apply_overrides,
     build_messages,
@@ -45,6 +46,7 @@ from snow.contracts.events import (
     LlmSwitch,
     ReplyDelta,
     ReplyFinal,
+    ReplyInterrupted,
     SttStatus,
     TranscriptFinal,
     TurnCancelled,
@@ -139,6 +141,9 @@ class BrainWorker:
                 await self._ack(event)
             case TurnCancelled():
                 self._cancel(event)
+            case ReplyInterrupted():
+                if event.turn_id:  # a wake acknowledgement's cut has no turn
+                    self._history.interrupt(event.turn_id, event.spoken_text)
             case VoiceSwitch():
                 self._facts.append(
                     Fact(
@@ -218,7 +223,10 @@ class BrainWorker:
     # --- conversation turns ----------------------------------------------------
 
     def _cancel(self, event: TurnCancelled) -> None:
-        """turn.cancelled: stop the active turn's stream; no reply.final follows."""
+        """turn.cancelled: stop the active turn's stream; no reply.final follows.
+
+        The turn is still recorded and reply.interrupted trims it to what was heard.
+        """
         task = self._turns.get(event.turn_id or "")
         if task and task is not asyncio.current_task():
             task.cancel()
@@ -257,11 +265,13 @@ class BrainWorker:
             self._facts = facts + self._facts
             return
         parser = HeaderParser(persona.allowed_emotions, persona.fallback_emotion)
+        marks = MarkFilter()  # the interruption note is never published (SPCH-01)
         chunks = aiter(stream)
         text = ""
 
-        async def say(piece: str) -> None:
+        async def say(piece: str, *, filtered: bool = False) -> None:
             nonlocal text
+            piece = piece if filtered else marks.feed(piece)
             if not piece:
                 return
             text += piece
@@ -285,11 +295,12 @@ class BrainWorker:
             except MidStreamError:
                 log.error("llm_midstream_error provider=%s", stream.provider)
             await say(parser.flush())
+            await say(marks.flush(), filtered=True)
         finally:
+            self._history.add(heard.text, text, tid)  # also when barge-in cancels us
             # Closing the stream lets the chain record llm.call "cancelled".
             if isinstance(chunks, AsyncGenerator):
                 await chunks.aclose()
-        self._history.add(heard.text, text)
         await self._publish(
             ReplyFinal(
                 ts_ns=time.time_ns(),

@@ -1,5 +1,7 @@
 """SPCH-01/02, D-01 to D-06, D-35, D-36: persona, tone tag, guardrails, history."""
 
+import asyncio
+import contextlib
 import json
 import time
 from datetime import UTC, datetime
@@ -8,17 +10,27 @@ from typing import Any
 import pytest
 
 from snow.brain.persona import (
+    INTERRUPTED_MARK,
     Fact,
     History,
+    MarkFilter,
     PersonaConfig,
     apply_overrides,
     build_messages,
 )
 from snow.brain.worker import BrainWorker
 from snow.config.settings import load_config
-from snow.contracts.events import Event, ReplyDelta, ReplyFinal, Tone, TranscriptFinal
+from snow.contracts.events import (
+    Event,
+    ReplyDelta,
+    ReplyFinal,
+    ReplyInterrupted,
+    Tone,
+    TranscriptFinal,
+    TurnCancelled,
+)
 from snow.contracts.wire import TranscriptRow
-from tests.brain.conftest import Routes, sse_route
+from tests.brain.conftest import Routes, sse_route, stall_route
 from tests.conftest import InMemoryKeyring, SnowDirs
 
 
@@ -106,15 +118,24 @@ def test_history_drops_oldest_when_the_token_budget_is_exceeded() -> None:
     assert [u[0] for u, _ in kept] == ["c", "e"]
 
 
-def test_history_is_seeded_from_snapshot_rows() -> None:
-    def row(kind: str, text: str, n: int) -> TranscriptRow:
-        return TranscriptRow(
-            row_id=str(n),
-            kind=kind,  # pyright: ignore[reportArgumentType]
-            text=text,
-            ts_ns=n,
-        )
+def row(
+    kind: str,
+    text: str,
+    n: int,
+    turn_id: str | None = None,
+    interrupted: bool = False,
+) -> TranscriptRow:
+    return TranscriptRow(
+        row_id=str(n),
+        kind=kind,  # pyright: ignore[reportArgumentType]
+        text=text,
+        ts_ns=n,
+        turn_id=turn_id,
+        interrupted=interrupted,
+    )
 
+
+def test_history_is_seeded_from_snapshot_rows() -> None:
     h = History()
     h.seed(
         [
@@ -125,6 +146,64 @@ def test_history_is_seeded_from_snapshot_rows() -> None:
         ]
     )
     assert h.window(6, 1000) == [("hello", "good evening")]
+
+
+CUT = "One. " + INTERRUPTED_MARK
+
+
+def test_interrupt_after_add_keeps_only_the_heard_words() -> None:
+    h = History()
+    h.add("other", "kept")
+    h.add("count to three", "One. Two. Three.", "t1")
+    h.interrupt("t1", "One.")
+    assert h.window(6, 1000) == [("other", "kept"), ("count to three", CUT)]
+
+
+def test_interrupt_before_add_gives_the_same_window() -> None:
+    h = History()
+    h.interrupt("t1", "One.")
+    assert len(h) == 0  # an unknown turn adds no pair by itself
+    h.add("count to three", "One. Two. Three.", "t1")
+    assert h.window(6, 1000) == [("count to three", CUT)]
+
+
+def test_interrupt_with_nothing_heard_stores_just_the_marker() -> None:
+    h = History()
+    h.add("q", "Long answer.", "t1")
+    h.interrupt("t1", "  ")
+    assert h.window(6, 1000) == [("q", INTERRUPTED_MARK)]
+
+
+def test_seed_respects_interrupted_rows() -> None:
+    h = History()
+    h.seed(
+        [
+            row("user", "q", 1),
+            row("snow", "One.", 2, turn_id="t1", interrupted=True),
+            row("user", "r", 3),
+            row("snow", "Whole.", 4, turn_id="t2"),
+        ]
+    )
+    assert h.window(6, 1000) == [("q", CUT), ("r", "Whole.")]
+
+
+def test_persona_explains_the_marker_without_scripting_a_line(
+    persona: PersonaConfig,
+) -> None:
+    prompt = persona.system_prompt
+    assert INTERRUPTED_MARK in prompt
+    lowered = prompt.lower()
+    for words in ("never apologise", "never repeat", "offer to continue"):
+        assert words in lowered
+
+
+def test_mark_filter_strips_the_marker_even_when_split() -> None:
+    f = MarkFilter()
+    out = "".join(
+        f.feed(c) for c in ["One. [the us", "er interrupted", " you here] Two.", " [th"]
+    )
+    assert out + f.flush() == "One.  Two. [th"
+    assert INTERRUPTED_MARK not in out
 
 
 # --- worker: the conversation request and reply ---------------------------------
@@ -223,3 +302,90 @@ def test_the_local_date_and_time_is_in_every_system_prompt(
     msgs = build_messages(persona, History(), "what time is it", None, [], now=now)
     want = "Current local date and time: Saturday 24 October 2026, 02:05 PM UTC."
     assert want in str(msgs[0]["content"])
+
+
+# --- interruption: the next request carries only what was heard ---------------
+
+
+def heard_turn(text: str, turn_id: str) -> TranscriptFinal:
+    return TranscriptFinal(
+        ts_ns=time.time_ns(), source="voice", text=text, turn_id=turn_id
+    )
+
+
+def assert_next_turn_carries_the_cut(routes: Routes) -> None:
+    msgs = request_body(routes)["messages"]
+    assert [(m["role"], m["content"]) for m in msgs[1:]] == [
+        ("user", "count to three"),
+        ("assistant", CUT),
+        ("user", "and then?"),
+    ]
+    blob = json.dumps(msgs[1:])
+    assert "Two." not in blob and "Three." not in blob
+
+
+async def test_interrupt_after_the_stream_ended_trims_the_next_request(
+    snow_dirs: SnowDirs, memory_keyring: InMemoryKeyring, routes: Routes
+) -> None:
+    sse_route(routes, "api.groq.com", ["[[calm]] One.", " Two.", " Three."])
+    sse_route(routes, "api.groq.com", ["[[calm]] Quite."])
+    worker, _ = make_worker(routes, memory_keyring)
+    await worker.on_event(heard_turn("count to three", "t1"))
+    await worker.on_event(
+        ReplyInterrupted(
+            ts_ns=time.time_ns(), source="voice", turn_id="t1", spoken_text="One."
+        )
+    )
+    await worker.on_event(heard_turn("and then?", "t2"))
+    assert_next_turn_carries_the_cut(routes)
+
+
+@pytest.mark.parametrize("cancel_first", [True, False])
+async def test_interrupt_mid_stream_records_the_turn_and_publishes_no_final(
+    snow_dirs: SnowDirs,
+    memory_keyring: InMemoryKeyring,
+    routes: Routes,
+    cancel_first: bool,
+) -> None:
+    stall_route(routes, "api.groq.com", ["[[calm]] One.", " Two.", " Three."])
+    sse_route(routes, "api.groq.com", ["[[calm]] Quite."])
+    worker, published = make_worker(routes, memory_keyring)
+    task = asyncio.create_task(worker.on_event(heard_turn("count to three", "t1")))
+    async with asyncio.timeout(5):
+        while not any(isinstance(e, ReplyDelta) for e in published):  # noqa: ASYNC110
+            await asyncio.sleep(0.01)
+    cancelled = TurnCancelled(
+        ts_ns=time.time_ns(), source="voice", turn_id="t1", cancel_reason="barge_in"
+    )
+    cut = ReplyInterrupted(
+        ts_ns=time.time_ns(), source="voice", turn_id="t1", spoken_text="One."
+    )
+    if cancel_first:
+        await worker.on_event(cancelled)
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        await worker.on_event(cut)
+    else:
+        await worker.on_event(cut)
+        await worker.on_event(cancelled)
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    assert not [e for e in published if isinstance(e, ReplyFinal)]
+    await worker.on_event(heard_turn("and then?", "t2"))
+    assert_next_turn_carries_the_cut(routes)
+
+
+async def test_a_reply_containing_the_marker_is_published_without_it(
+    snow_dirs: SnowDirs, memory_keyring: InMemoryKeyring, routes: Routes
+) -> None:
+    sse_route(
+        routes,
+        "api.groq.com",
+        ["[[calm]] Yes. [the user inter", "rupted you here] Sir."],
+    )
+    worker, published = make_worker(routes, memory_keyring)
+    await worker.on_event(heard("hello"))
+    [final] = [e for e in published if isinstance(e, ReplyFinal)]
+    said = "".join(e.text for e in published if isinstance(e, ReplyDelta))
+    assert INTERRUPTED_MARK not in said and INTERRUPTED_MARK not in str(final.text)
+    assert "Yes." in said and "Sir." in said

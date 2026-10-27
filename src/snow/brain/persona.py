@@ -15,6 +15,8 @@ from snow.contracts.events import Tone
 from snow.contracts.wire import TranscriptRow
 
 CALM = "calm"
+# A note for the model only, never spoken (SPCH-01); config/persona.toml explains it.
+INTERRUPTED_MARK = "[the user interrupted you here]"
 _KEEP_PAIRS = 50  # storage bound; the per-turn window is trimmed by the persona caps
 
 
@@ -48,18 +50,61 @@ def _tokens(text: str) -> int:
     )  # shortcut: chars/4 estimate, swap for a tokenizer if budgets get tight
 
 
-class History:
-    """Past (user, reply) pairs, oldest first, trimmed by turn and token caps."""
+def _cut(spoken: str) -> str:
+    """What the user heard, then the marker (only the marker if nothing was heard)."""
+    heard = spoken.rstrip()
+    return f"{heard} {INTERRUPTED_MARK}" if heard else INTERRUPTED_MARK
+
+
+class MarkFilter:
+    """Strips INTERRUPTED_MARK from streamed text, even when chunks split it."""
 
     def __init__(self) -> None:
-        self._pairs: list[tuple[str, str]] = []
+        self._held = ""
+
+    def feed(self, piece: str) -> str:
+        text = (self._held + piece).replace(INTERRUPTED_MARK, "")
+        for k in range(min(len(text), len(INTERRUPTED_MARK) - 1), 0, -1):
+            if INTERRUPTED_MARK.startswith(text[-k:]):
+                self._held = text[-k:]
+                return text[:-k]
+        self._held = ""
+        return text
+
+    def flush(self) -> str:
+        held, self._held = self._held, ""
+        return held
+
+
+class History:
+    """Past (user, reply) pairs, oldest first, trimmed by turn and token caps.
+
+    A reply the user cut off keeps only the words they heard, then INTERRUPTED_MARK.
+    """
+
+    def __init__(self) -> None:
+        self._pairs: list[tuple[str, str, str | None]] = []
+        self._cuts: dict[str, str] = {}  # interrupt that arrived before its turn's add
 
     def __len__(self) -> int:
         return len(self._pairs)
 
-    def add(self, user: str, reply: str) -> None:
-        self._pairs.append((user, reply))
+    def add(self, user: str, reply: str, turn_id: str | None = None) -> None:
+        if turn_id is not None:
+            reply = self._cuts.pop(turn_id, reply)
+        self._pairs.append((user, reply, turn_id))
         del self._pairs[:-_KEEP_PAIRS]
+
+    def interrupt(self, turn_id: str, spoken: str) -> None:
+        cut = _cut(spoken)
+        for i in range(len(self._pairs) - 1, -1, -1):
+            user, _, tid = self._pairs[i]
+            if tid == turn_id:
+                self._pairs[i] = (user, cut, tid)
+                return
+        self._cuts[turn_id] = cut
+        while len(self._cuts) > _KEEP_PAIRS:
+            del self._cuts[next(iter(self._cuts))]
 
     def seed(self, rows: Iterable[TranscriptRow]) -> None:
         """Rebuild pairs from a hub snapshot so a restarted brain keeps its thread."""
@@ -68,17 +113,18 @@ class History:
             if row.kind == "user":
                 pending = row.text
             elif row.kind == "snow" and pending is not None:
-                self.add(pending, row.text)
+                text = _cut(row.text) if row.interrupted else row.text
+                self.add(pending, text, row.turn_id)
                 pending = None
 
     def window(self, turns: int, token_budget: int) -> list[tuple[str, str]]:
         kept = self._pairs[-turns:] if turns > 0 else []
         while (
             len(kept) > 1
-            and sum(_tokens(u) + _tokens(r) for u, r in kept) > token_budget
+            and sum(_tokens(u) + _tokens(r) for u, r, _ in kept) > token_budget
         ):
             kept = kept[1:]
-        return kept
+        return [(u, r) for u, r, _ in kept]
 
 
 def tone_line(tone: Tone) -> str:
