@@ -8,11 +8,12 @@ updated: 2026-10-25T10:40:00Z
 
 ## Current Test
 
-number: 7
-name: Go to sleep
+number: 8
+name: Tray, tooltip and mini orb
 expected: |
-  Say "that's all" in a conversation: Snow ends it. Then say "Hey Snow, go to sleep".
-  Snow stops listening for follow-ups but still wakes on "Hey Snow".
+  Hover the tray icon: tooltip "Snow: Sleeping" or "Snow: Listening". Close the
+  dashboard: a small orb bar appears top-right, always on top. Click it: the dashboard
+  comes back.
 awaiting: user response
 
 ## Tests
@@ -54,7 +55,8 @@ note: "User: everything else is also good (speed 0.9 confirmed). New request log
 
 ### 7. Go to sleep
 expected: Say "that's all" in a conversation: Snow ends it. Then say "Hey Snow, go to sleep". Snow stops listening for follow-ups (orb in its sleeping state) but still wakes on "Hey Snow".
-result: [pending]
+result: pass
+note: "2026-10-28 01:25 session log: wake, time answer, go to sleep (end_reason sleep), wake again. Second session with FxSound off at 45 % volume: 3 of 3 real barge-ins confirmed (speaker 0.38-0.61), 0 self-triggered pauses (first session with FxSound on: 5 self-pauses, all rejected but audible)."
 
 ### 8. Tray, tooltip and mini orb
 expected: Hover the tray icon: the tooltip reads "Snow: Sleeping" or "Snow: Listening". Close the dashboard window: a small floating orb bar appears at the top-right of the screen, always on top. Click the orb: the dashboard comes back and the mini bar hides.
@@ -103,9 +105,9 @@ severity: major
 ## Summary
 
 total: 16
-passed: 7
+passed: 8
 issues: 1
-pending: 5
+pending: 4
 skipped: 2
 
 ## Gaps
