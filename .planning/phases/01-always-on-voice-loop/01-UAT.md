@@ -8,12 +8,11 @@ updated: 2026-10-25T10:40:00Z
 
 ## Current Test
 
-number: 8
-name: Tray, tooltip and mini orb
+number: 10
+name: Tone matching
 expected: |
-  Hover the tray icon: tooltip "Snow: Sleeping" or "Snow: Listening". Close the
-  dashboard: a small orb bar appears top-right, always on top. Click it: the dashboard
-  comes back.
+  A fast, loud, stressed question gets a calm, short reply with no jokes; a slow calm one
+  gets a normal reply.
 awaiting: user response
 
 ## Tests
@@ -60,11 +59,13 @@ note: "2026-10-28 01:25 session log: wake, time answer, go to sleep (end_reason 
 
 ### 8. Tray, tooltip and mini orb
 expected: Hover the tray icon: the tooltip reads "Snow: Sleeping" or "Snow: Listening". Close the dashboard window: a small floating orb bar appears at the top-right of the screen, always on top. Click the orb: the dashboard comes back and the mini bar hides.
-result: [pending]
+result: pass
+note: "Tooltip reads 'Snow: Standing by' while sleeping (Presence.tsx state word), as designed."
 
 ### 9. The orb's look
 expected: The orb in the dashboard and the mini bar is the glowing ASCII network orb (a sphere of glyphs, cyan to violet), not a plain circle.
-result: [pending]
+result: pass
+note: "User: present; visual polish moves to Phase 6 (Glass-box HUD & Jarvis Body)."
 
 ### 10. Tone matching
 expected: Speak one question fast and loud as if stressed, and another slowly and calmly. Snow's reply to the stressed one is calm, short and has no jokes.
@@ -105,9 +106,9 @@ severity: major
 ## Summary
 
 total: 16
-passed: 8
+passed: 10
 issues: 1
-pending: 4
+pending: 2
 skipped: 2
 
 ## Gaps
@@ -177,3 +178,9 @@ skipped: 2
     - "Speaker verification (Phase 2) so barge-in can be faster and Snow's own voice is ignored"
     - "Identify the jitter (user description needed)"
   debug_session: ""
+
+## Deferred Follow-Ups
+
+- test: 9
+  idea: "we will make it look better in the phase 6"
+  deferred_at: 2026-10-28
