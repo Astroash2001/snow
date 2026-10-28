@@ -110,7 +110,7 @@ def launched_hub(snow_dirs: SnowDirs, tmp_path: Path) -> Iterator[list[str]]:
         "FAKE_API_KEY": "leak-1",
         "SOME_SECRET": "leak-2",
         # its own single-instance mutex, so a running Snow does not stop this hub
-        "SNOW_HUB_MUTEX": f"Local\SnowHubTest{uuid.uuid4().hex}",
+        "SNOW_HUB_MUTEX": f"Local\\SnowHubTest{uuid.uuid4().hex}",
     }
     hub = subprocess.Popen(  # noqa: S603
         [sys.executable, "-m", "snow.hub"], env=env, stdout=subprocess.DEVNULL

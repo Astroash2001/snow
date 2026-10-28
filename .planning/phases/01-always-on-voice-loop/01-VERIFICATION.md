@@ -87,7 +87,7 @@ covered_files:
   - src/snow/voice/pipeline.py
   - tests/test_cli.py
   - tests/voice/test_loopback.py
-covered_digest: "v3:sha256:34699bddf11af9e0c208d3dbeb0831776c1046828d469ed82e3be1e3649d4f68"
+covered_digest: "v3:sha256:3e0e9972d3983a527a527f5d11b72652bc4c78e17999cf161a0cb256e34e81a1"
 behavior_unverified: 1
 overrides_applied: 0
 behavior_unverified_items:
