@@ -1,19 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 01-always-on-voice-loop
 source: [01-01-SUMMARY.md through 01-33-SUMMARY.md]
 started: 2026-10-25T08:30:00Z
-updated: 2026-10-25T10:40:00Z
+updated: 2026-10-28T06:57:20.617Z
 ---
 
 ## Current Test
 
-number: 10
-name: Tone matching
-expected: |
-  A fast, loud, stressed question gets a calm, short reply with no jokes; a slow calm one
-  gets a normal reply.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -69,11 +64,11 @@ note: "User: present; visual polish moves to Phase 6 (Glass-box HUD & Jarvis Bod
 
 ### 10. Tone matching
 expected: Speak one question fast and loud as if stressed, and another slowly and calmly. Snow's reply to the stressed one is calm, short and has no jokes.
-result: [pending]
+result: pass
 
 ### 11. Laptop sleep and resume
 expected: With Snow running, put the laptop to sleep for a minute and wake it. Snow is still running, the health rows return to Running, and "Hey Snow" works without restarting Snow.
-result: [pending]
+result: pass
 
 ### 12. Automated deliverables (machine-checked)
 expected: Every deliverable whose check is an automated test (fixtures, STT routing and fallback, Groq error mapping, no audio before wake, partials, barge-in timing, TTS routing and failover, Cartesia budget and outage handling, Chatterbox GPU policy, consent tags, mute persistence, privacy of audio files) passes in the full suite.
@@ -99,16 +94,18 @@ severity: major
 
 ### 16. A slow provider does not silence Snow
 expected: When the first fast provider is slow, Snow still answers from the next trusted one.
-result: issue
+result: pass
+source: automated
+note: "Fixed by fast ttft_timeout_s 4.0 (56c0856) and quick 261026-nvh per-model cooldown (tests/brain/test_cooldown.py: a timeout on one groq model still tries the other in the same turn; untrusted providers never promoted). Not reproduced live since."
 reported: "Screenshot 2026-10-26: 'Request held back: only providers not cleared for private data were available.' Fast role cooling down."
 severity: major
 
 ## Summary
 
 total: 16
-passed: 10
-issues: 1
-pending: 2
+passed: 13
+issues: 0
+pending: 0
 skipped: 2
 
 ## Gaps
@@ -133,7 +130,7 @@ skipped: 2
 
 - gap_id: G-01-16
   truth: "A slow provider does not silence Snow"
-  status: failed
+  status: resolved
   reason: "User reported (screenshot): Request held back: only providers not cleared for private data were available."
   severity: major
   test: 16
