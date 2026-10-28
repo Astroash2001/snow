@@ -40,8 +40,6 @@ from tests.voice.test_echo_cancel import (
     noise,
     to_pcm,
 )
-from tests.voice.test_turn_engine import Over
-from tests.voice.test_turn_engine import wake as wake_phrase
 
 REAL = "Speakers (Realtek(R) Audio)"
 FX = "FxSound Speakers (FxSound Audio Enhancer)"
@@ -607,63 +605,9 @@ def test_voice_toml_opts_in_to_the_loopback() -> None:
         a.aec_reference,
         a.aec_reference_device,
         a.output_enhancers,
-        a.enhancer_disables_bargein,
-    ) == ("loopback", "", ["FxSound"], False)
+    ) == ("loopback", "", ["FxSound"])
 
 
 def test_an_unknown_reference_fails_validation() -> None:
     with pytest.raises(ValidationError):
         AudioConfig(aec_reference="loop")  # type: ignore[arg-type]
-
-
-# --- the wake-only fallback ----------------------------------------------------------
-
-
-def test_without_speech_barge_in_only_the_wake_phrase_cuts_a_reply() -> None:
-    o = Over()
-    o.engine.speech_barge_in = lambda: False
-    o.talk(60)  # two seconds of speech over Snow
-    assert o.pauses == [] and o.checks == [] and o.barge_ins() == 0
-    wake_phrase(o.engine)
-    assert o.barge_ins() == 1
-
-
-def test_speech_barge_in_defaults_to_on() -> None:
-    o = Over()
-    o.talk(10)
-    assert o.pauses == [True]
-
-
-@pytest.mark.parametrize(
-    ("flag", "output", "loop_live", "allowed"),
-    [
-        (True, FX, False, False),
-        (True, FX, True, True),
-        (False, FX, False, True),
-        (True, REAL, False, True),
-        (True, "", False, True),
-    ],
-)
-async def test_the_pipeline_gates_speech_barge_in_on_an_enhancer_without_loopback(
-    groq: FakeGroq,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-    flag: bool,
-    output: str,
-    loop_live: bool,
-    allowed: bool,
-) -> None:
-    audio = CFG.audio.model_copy(update={"enhancer_disables_bargein": flag})
-    monkeypatch.setattr(
-        "tests.voice.test_bargein.CFG", CFG.model_copy(update={"audio": audio})
-    )
-    monkeypatch.setattr("snow.voice.pipeline.default_output_name", lambda: output)
-    with caplog.at_level(logging.WARNING, logger="snow.voice"):
-        rig = await make_rig(groq, HoldEngine(hold_from=2), echo_cancel=True)
-    aec = rig.pipeline._aec  # noqa: SLF001
-    assert aec is not None
-    aec.loopback = loop_live
-    assert rig.turn.speech_barge_in() is allowed
-    warned = "speech_barge_in=wake_only_without_loopback" in caplog.text
-    assert warned is (flag and output == FX)
-    await rig.pipeline.stop()

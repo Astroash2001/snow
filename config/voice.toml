@@ -13,8 +13,6 @@ aec_reference = "loopback"
 aec_reference_device = ""      # part of the speaker endpoint's name; "" = automatic: the
                                # default output, or the one real output behind an enhancer
 output_enhancers = ["FxSound"] # default outputs whose name contains one of these
-# true: with an enhancer and no live loopback, only "Hey Snow" interrupts Snow.
-enhancer_disables_bargein = false
 
 [wake]
 # The user's trained "hey snow" model (D-41, plan 01-30; recipe in training/wakeword).

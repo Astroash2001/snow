@@ -20,8 +20,6 @@ class AudioConfig(_Strict):
     # Output enhancers (FxSound...) are virtual outputs: Snow's own audio is changed
     # after it leaves Snow, so the loopback must read the real speakers behind them.
     output_enhancers: list[str] = []
-    # With an enhancer and no live loopback, only "Hey Snow" interrupts Snow.
-    enhancer_disables_bargein: bool = False
 
 
 class WakeConfig(_Strict):

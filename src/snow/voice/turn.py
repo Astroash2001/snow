@@ -143,9 +143,6 @@ class TurnEngine:
         # Pauses (True) or resumes (False) Snow's playout, holding the rest; set by the
         # pipeline.
         self.pause: Callable[[bool], None] = lambda paused: None
-        # May speech over Snow start a barge-in episode? The pipeline turns it off when
-        # an output enhancer is on and the echo has no reliable reference (wake-only).
-        self.speech_barge_in: Callable[[], bool] = lambda: True
         # Asks for the check of an episode's audio; the answer is `verdict()`. The
         # default accepts at once, the synchronous fake tests want.
         self.check: Callable[[Pcm, int], None] = lambda pcm, episode: self.verdict(
@@ -345,7 +342,7 @@ class TurnEngine:
         self._hold = max(0, self._hold - CHUNK)  # counts only while Snow is audible
         speech = self._vad.speech_prob(chunk) >= cfg.vad_threshold
         if self._barge_span == 0:
-            if not speech or not self.speech_barge_in():
+            if not speech:
                 return
             self._episode += 1
         self._barge_span += CHUNK
