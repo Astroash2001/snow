@@ -38,8 +38,14 @@ from snow.contracts.wire import Command, MuteSet, Snapshot
 from snow.voice.aec import EchoCanceller
 from snow.voice.bargein import decide, echo_ratio, words
 from snow.voice.config import VoiceConfig
+from snow.voice.loopback import LoopbackReference, is_enhancer
 from snow.voice.phrases import match_command, strip_wake
-from snow.voice.playout import Playout, StreamFactory, device_rate
+from snow.voice.playout import (
+    Playout,
+    StreamFactory,
+    default_output_name,
+    device_rate,
+)
 from snow.voice.polish import Polish
 from snow.voice.sources import AudioSource, Frame
 from snow.voice.stt_groq import GroqStt, SttUnavailable
@@ -190,6 +196,7 @@ class VoicePipeline:
         # Echo cancellation (VOIC-06): only the worker's live mic turns it on.
         self._echo_cancel = echo_cancel
         self._aec: EchoCanceller | None = None
+        self._loopback: LoopbackReference | None = None
         self._tts_ready: asyncio.Event
         self._playout: Playout | None = None
         self._chunker = SentenceChunker()
@@ -361,6 +368,8 @@ class VoicePipeline:
             self._tts.stop()
         if self._playout is not None:
             self._playout.close()
+        if self._loopback is not None:
+            self._loopback.close()
         if self._aec is not None:
             self._aec.close()
         for task in [self._publisher_task, *self._tasks]:
@@ -547,6 +556,15 @@ class VoicePipeline:
             aec = self._aec
             if aec is not None:
                 self._engine.echo_warming = aec.warming
+                a = self._cfg.audio
+                if a.aec_reference == "loopback":  # its thread logs the live reference
+                    self._loopback = LoopbackReference(
+                        aec, a.aec_reference_device, a.output_enhancers
+                    )
+                    self._loopback.start()
+                else:
+                    log.info("aec_reference=render reason=config")
+            self._gate_speech_barge_in()
             self._playout = Playout(
                 rate,
                 self._tts_cfg.playout,
@@ -558,6 +576,22 @@ class VoicePipeline:
             )
             self._engine.pause = self._pause
         self._tts_ready.set()  # no playout: no voice loaded, replies stay silent
+
+    def _gate_speech_barge_in(self) -> None:
+        """Wake-only fallback (off by default): behind an output enhancer with no live
+        loopback the echo is not cancelled, so only "Hey Snow" may interrupt Snow."""
+        a = self._cfg.audio
+        output = default_output_name()
+        if not (
+            a.enhancer_disables_bargein and is_enhancer(output, a.output_enhancers)
+        ):
+            return
+        log.warning(
+            "speech_barge_in=wake_only_without_loopback output_enhancer=%r", output
+        )
+        self._engine.speech_barge_in = lambda: (
+            self._aec is not None and self._aec.loopback
+        )
 
     async def _load_speaker(self, speaker: SpeakerCheck) -> None:
         """Load the verifier off the loop. Until it is up (or if it never loads) a PC

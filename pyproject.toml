@@ -23,6 +23,7 @@ dependencies = [
     "soxr==1.0.0",
     "sherpa-onnx==1.13.8",
     "sherpa-onnx-core==1.13.8",
+    "pyaudiowpatch==0.2.12.9",
 ]
 
 [project.scripts]

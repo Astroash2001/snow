@@ -185,6 +185,34 @@ class FakeGroq:
 def no_device_rate(monkeypatch: pytest.MonkeyPatch) -> None:
     """The voice keeps its own rate in tests: no real audio device is ever queried."""
     monkeypatch.setattr("snow.voice.pipeline.device_rate", lambda: None)
+    monkeypatch.setattr("snow.voice.pipeline.default_output_name", lambda: "")
+
+
+class FakeLoopback:
+    """Stands in for LoopbackReference: records its arguments, opens no device."""
+
+    def __init__(self, aec: object, device: str = "", enhancers: object = ()) -> None:
+        self.aec, self.device, self.enhancers = aec, device, enhancers
+        self.started = self.closed = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture(autouse=True)
+def loopbacks(monkeypatch: pytest.MonkeyPatch) -> list[FakeLoopback]:
+    """No voice test opens a real loopback device; the fakes made are returned."""
+    made: list[FakeLoopback] = []
+
+    def make(*args: Any) -> FakeLoopback:
+        made.append(FakeLoopback(*args))
+        return made[-1]
+
+    monkeypatch.setattr("snow.voice.pipeline.LoopbackReference", make)
+    return made
 
 
 def polish_off() -> PolishConfig:

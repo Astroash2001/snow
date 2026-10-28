@@ -4,6 +4,17 @@
 input_device = ""    # empty = the Windows default microphone
 sample_rate = 16000
 frame_samples = 1280 # 80 ms; the frame size openWakeWord expects
+# What the echo canceller treats as "what the speakers play". "loopback" reads what the
+# speakers really play (after FxSound or any enhancer), which also holds every other PC
+# sound, so videos and music are cancelled from the mic too. It falls back to "render"
+# (Snow's own audio before any enhancer) whenever the loopback is unavailable. Audio
+# stays in memory only.
+aec_reference = "loopback"
+aec_reference_device = ""      # part of the speaker endpoint's name; "" = automatic: the
+                               # default output, or the one real output behind an enhancer
+output_enhancers = ["FxSound"] # default outputs whose name contains one of these
+# true: with an enhancer and no live loopback, only "Hey Snow" interrupts Snow.
+enhancer_disables_bargein = false
 
 [wake]
 # The user's trained "hey snow" model (D-41, plan 01-30; recipe in training/wakeword).

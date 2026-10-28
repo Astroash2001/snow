@@ -12,6 +12,14 @@ only voice and a fail-closed fake Groq, so no audio leaves the PC and no Cartesi
 goes out. Nothing is recorded or written; the stand-in voiceprint lives in pytest's tmp
 path only.
 
+The room-sound scenarios pin the echo reference to "render": room sounds play through
+the PC, so a loopback reference would cancel them and they would no longer stand in for
+a person in the room. The FxSound-style scenarios use the loopback: Snow's own
+voice goes through an EQ, a dynamic gain and saturation stage after the render
+reference (what an output enhancer does), and the canceller must still not hear it.
+They need the laptop speakers (or any real output) as the default output; with FxSound
+itself as the default the loopback picks the single real output behind it.
+
 Two voiceprint states: "enrolled" (the user's voiceprint when `snow dev enroll-voice`
 has been run, otherwise a stand-in built from a fixture voice, which is NOT evidence of
 the biometric gate) and "none" (the degraded words-only mode). Room sounds and a voice
@@ -42,7 +50,7 @@ from snow.contracts.events import ReplyInterrupted, TtsSpoken
 from snow.voice.config import VoiceConfig
 from snow.voice.enroll import snow_is_running
 from snow.voice.pipeline import VoicePipeline, build_pipeline
-from snow.voice.playout import Playout
+from snow.voice.playout import Playout, StreamFactory, _device_stream
 from snow.voice.sources import Frame, MicSource, OnFrame, read_wav
 from snow.voice.speaker import SpeakerVerifier, save_voiceprint, voiceprint_path
 from snow.voice.stt_groq import GroqStt
@@ -117,6 +125,49 @@ def room_noise(
         i = int(t * rate)
         out[i : i + click] += 0.35 * band_noise(rng, click, rate) * decay
     return np.clip(out, -1, 1)
+
+
+# --- an output enhancer, like FxSound ------------------------------------------------
+
+
+class FxStyle:
+    """Bass-boost EQ, then a smoothed AGC/compressor, then tanh saturation: all in
+    numpy, cheap and deterministic. Applied to what the speakers play, after the
+    echo reference has seen the clean block."""
+
+    TAPS = 129
+
+    def __init__(self, rate: int) -> None:
+        t = np.arange(self.TAPS) - self.TAPS // 2
+        low = np.sinc(2 * 250 / rate * t) * np.hamming(self.TAPS)
+        ident = np.zeros(self.TAPS)
+        ident[self.TAPS // 2] = 1.0
+        self.taps = (0.6 * ident + 0.4 * low / low.sum()).astype(np.float32)
+        self.history = np.zeros(self.TAPS - 1, dtype=np.float32)
+        self.gain = 1.0
+
+    def process(self, x: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        buf = np.concatenate([self.history, x])
+        self.history = buf[-(self.TAPS - 1) :]
+        y = np.convolve(buf, self.taps, mode="valid")
+        rms = float(np.sqrt(np.mean(np.square(y, dtype=np.float64))))
+        target = float(np.clip(0.25 / max(rms, 1e-6), 0.5, 4.0))
+        self.gain += 0.3 * (target - self.gain)
+        z = np.tanh(1.8 * self.gain * y) / np.tanh(1.8)
+        return np.clip(z, -1.0, 1.0).astype(np.float32)
+
+
+def fx_stream_factory() -> StreamFactory:
+    def factory(rate: int, block: int, callback: Callable[..., None]):  # noqa: ANN202
+        fx = FxStyle(rate)
+
+        def wrapped(outdata: npt.NDArray[np.float32], *rest: object) -> None:
+            callback(outdata, *rest)  # the clean block reaches on_render first
+            outdata[:, 0] = fx.process(outdata[:, 0])
+
+        return _device_stream(rate, block, wrapped)
+
+    return factory
 
 
 # --- the rig -----------------------------------------------------------------------
@@ -281,7 +332,12 @@ def stand_in_voiceprint(tmp: Path) -> tuple[SpeakerVerifier, str]:
 
 @asynccontextmanager
 async def running(
-    state: str, tmp: Path, caplog: pytest.LogCaptureFixture
+    state: str,
+    tmp: Path,
+    caplog: pytest.LogCaptureFixture,
+    *,
+    reference: str = "render",
+    fx: bool = False,
 ) -> AsyncIterator[Rig]:
     caplog.set_level(logging.INFO, logger="snow.voice")
     speaker: SpeakerVerifier | None = None
@@ -297,13 +353,16 @@ async def running(
         lambda _n: Secret("gsk_test_key_not_real"),
         transport=httpx2.MockTransport(groq.handler),
     )
-    a = CFG.audio
+    cfg = CFG.model_copy(
+        update={"audio": CFG.audio.model_copy(update={"aec_reference": reference})}
+    )
+    a = cfg.audio
     local = LocalStt(CFG.stt.local, a.sample_rate)
     router = TTS.router.model_copy(update={"order": ["pocket_tts"]})
     tts_cfg = TTS.model_copy(update={"router": router})
     mic, hub, stats = ArmableMic(), FakeHub(), Stats()
     pipeline = build_pipeline(
-        CFG,
+        cfg,
         hub,
         mic,  # type: ignore[arg-type]
         stt,
@@ -313,6 +372,8 @@ async def running(
         echo_cancel=True,
         speaker=speaker,
     )
+    if fx:
+        pipeline._stream_factory = fx_stream_factory()  # noqa: SLF001
     engine = pipeline._engine  # noqa: SLF001
     check = engine.check
 
@@ -353,6 +414,15 @@ async def running(
             pause(paused)
 
         engine.pause = spy_pause
+        if reference == "loopback":
+            aec = pipeline._aec  # noqa: SLF001
+            try:
+                await until(lambda: aec is not None and aec.loopback, 10)
+            except TimeoutError:
+                lines = [
+                    r.getMessage() for r in caplog.records if "aec_" in r.getMessage()
+                ]
+                pytest.fail(f"the loopback reference never came up: {lines}")
         await asyncio.sleep(1.5)  # the microphone settles before anything plays
         yield Rig(pipeline, hub, mic, room, stats, state)
         assert not groq.violations, f"requests to unrouted hosts: {groq.violations}"
@@ -483,3 +553,33 @@ async def test_a_voice_over_snow_is_rejected_with_the_users_voiceprint(
         rig.report("a voice clip over Snow, with the user's voiceprint")
         assert rig.interrupted() == 0, "a voice that is not the user's cut Snow off"
         assert any(reason == "speaker" for reason, _ in rig.stats.reasons)
+
+
+async def test_fxsound_style_output_with_the_loopback_reference_never_pauses_snow(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The point of the loopback: EQ, dynamic gain and saturation after the render
+    reference must not make Snow hear (and pause for) itself."""
+    async with running(
+        "enrolled", tmp_path, caplog, reference="loopback", fx=True
+    ) as rig:
+        for i in range(3):
+            await rig.reply(i)
+        rig.report("FxSound-style output, loopback reference, 3 long replies")
+        assert rig.interrupted() == 0, "Snow cut itself off"
+        assert rig.spoken() == 3, "a reply did not complete"
+        late = [p for p in rig.stats.pauses if p >= 1]
+        assert not late, f"Snow paused itself after warm-up, in replies {late}"
+
+
+async def test_fxsound_style_output_with_the_render_reference_is_recorded(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The control: the old reference. It reports pauses; only a crash fails."""
+    async with running(
+        "enrolled", tmp_path, caplog, reference="render", fx=True
+    ) as rig:
+        for i in range(3):
+            await rig.reply(i)
+        rig.report("FxSound-style output, render reference (the old reference)")
+        assert rig.interrupted() + rig.spoken() == 3
