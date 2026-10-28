@@ -259,3 +259,12 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.2: FxSound-proof echo cancellation (BACKLOG)
+
+**Goal:** [Captured for future planning] Optional, only when the user asks. The user keeps FxSound on (laptop speakers are weak), but FxSound changes Snow's audio after Snow sends it, so the WebRTC AEC3 reference (pre-FxSound) no longer matches the mic echo. In the 2026-10-28 test this caused 5 self-triggered pauses in 3 minutes with FxSound on and 0 with it off. Fix: feed the canceller a WASAPI loopback capture of the real speaker endpoint (post-FxSound), held in memory only and never stored. This also cancels any other audio the laptop plays. It needs one new package (PyAudioWPatch, or soundcard) with the user's approval. Verify with the loopback barge-in suite and earshot. Fallback: with an output enhancer detected, only "Hey Snow" interrupts. Estimate: half a day. Source: .planning/seeds/openjarvis-gap-study.md step 1.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
