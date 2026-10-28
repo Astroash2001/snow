@@ -23,6 +23,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 > **Cross-cutting rule — show the work (user decision 2026-10-28, HUD-13).** Every feature ships with a live panel that visualizes what the backend is doing while it does it, spawned on demand in the dashboard (HUD-04) and closed when done. Example: "find X" opens a panel showing the search tree or graph being walked and the hits as they appear. A phase is not done until its features have their panel. Phase 6 adds the polished look; earlier phases ship plain but working panels on a shared panel component.
+>
+> - **Shared panel contract first.** Panels are driven by typed hub events (`panel.open`, `panel.update`, `panel.close`, carrying a panel kind and a data payload such as a tree, graph, timeline or table). Features only publish data, and the HUD renders it. This keeps each phase free of HUD rendering code and avoids merge conflicts between parallel sessions.
+> - **Diagram rendering library: to be chosen.** The user has candidate repos for drawing trees, graphs and diagrams of anything. Evaluate them (license, size, Electron fit) when the panel renderer is built; until then the panels use a plain built-in view. Do not pick a library before that evaluation.
 
 ### Phase 1: Always-On Voice Loop
 
