@@ -22,6 +22,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ## Phase Details
 
+> **Cross-cutting rule — show the work (user decision 2026-10-28, HUD-13).** Every feature ships with a live panel that visualizes what the backend is doing while it does it, spawned on demand in the dashboard (HUD-04) and closed when done. Example: "find X" opens a panel showing the search tree or graph being walked and the hits as they appear. A phase is not done until its features have their panel. Phase 6 adds the polished look; earlier phases ship plain but working panels on a shared panel component.
+
 ### Phase 1: Always-On Voice Loop
 
 **Goal:** As a developer, I want to wake Snow by voice and talk with it naturally, so that I can speak to my PC instead of typing.
@@ -150,6 +152,7 @@ Notes:
 **UI hint**: yes
 
 Notes:
+- Show-the-work panels (HUD-13): live agent plan and status timeline, the diff and worktree tree being reviewed, and the summary's sources.
 - CORE-07 (added 2026-10-13 at roadmap approval): approved self-upgrade with automatic rollback — the second half of safe self-building.
 - The full set of live panels (terminal output, diffs, drafts, the app being controlled) is completed in Phase 5, when every panel type has something to show; this phase shows changes through the finished-task view.
 
@@ -170,6 +173,7 @@ Notes:
 **UI hint**: yes
 
 Notes:
+- Show-the-work panels (HUD-13): the background task board as a live graph of tasks and their states, each hand-off to the phone, and approval routing (where a request went and why).
 - Reuses the Phase 2 approval object unchanged; the phone is one more channel that resolves it, and an unanswered request still times out to deny.
 - Telegram is not end-to-end encrypted, so messages stay minimal and full detail opens only over Tailscale; replies are bound to the allow-listed numeric Telegram user ID.
 - Unknown presence is treated as away.
@@ -191,6 +195,7 @@ Notes:
 **UI hint**: yes
 
 Notes:
+- Show-the-work panels (HUD-13): the app's UI tree with the element being clicked highlighted, the file search (Everything results streaming in as a tree), and browser steps with screenshots.
 - Screen and web content is data, not instructions: the Phase 2 rule that any action originating from such content needs approval applies to every step here.
 - Research flag: UIPI and elevated windows, DPI and focus behaviour, the vision fallback chain decided 2026-10-14 (luna, Gemini Flash, qwen3.8-27b; support confirmed in the Phase 1 spike), and injection defence for screen reading.
 - WhatsApp Desktop is the requirement's own example, but research flags account-ban risk for WhatsApp automation; confirm the target app during phase discussion.
@@ -212,6 +217,7 @@ Notes:
 **UI hint**: yes
 
 Notes:
+- Show-the-work panels (HUD-13): polish every earlier panel into the one design system (glow, motion, ASCII styling) and make the panel component the standard for all new features.
 - The GPU budget and detail fallback land before any heavy shader work inside this phase, measured on the RTX 4050 with speech recognition running.
 - Depends on Phase 4 for Tailscale access to the phone view; it can run alongside Phase 5 if desired. Earlier phases' functional views are restyled, not rebuilt, because the HUD is a client of the event log.
 - Time-box the orb art; the orb style is an abstract Jarvis-style network, not a human form.
@@ -231,6 +237,7 @@ Notes:
 **Plans:** TBD
 
 Notes:
+- Show-the-work panels (HUD-13): install, update and rollback progress, and the privacy self-check results.
 - Research flag: packaging the CUDA-enabled Python core and signing updates.
 - Release gates: soak test across sleep, lock and headphone changes; port scan showing only loopback and Tailscale listeners; prompt-injection red-team suite; canary-secret test.
 

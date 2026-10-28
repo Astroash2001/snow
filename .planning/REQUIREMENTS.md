@@ -91,6 +91,7 @@ Requirements for the first release. Each maps to one roadmap phase.
 - [ ] **HUD-10**: User can shrink the HUD to an always-on-top corner widget showing Snow's state and current action
 - [ ] **HUD-11**: User can view the same live HUD from the Android phone browser over the private network
 - [ ] **HUD-12**: The HUD stays within a fixed GPU budget and lowers its visual detail before it slows speech recognition
+- [ ] **HUD-13**: Every feature shows its work live: a spawn-on-demand panel visualizes what the backend is doing (e.g. a search shows the tree or graph being walked and the hits), shipped in the same phase as the feature
 
 ### Safety & Autonomy
 
@@ -241,6 +242,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HUD-10 | Phase 6 | Pending |
 | HUD-11 | Phase 6 | Pending |
 | HUD-12 | Phase 6 | Pending |
+| HUD-13 | Phases 2-7 (each feature's phase) | Pending |
 | SAFE-01 | Phase 2 | Pending |
 | SAFE-02 | Phase 2 | Pending |
 | SAFE-03 | Phase 2 | Pending |
