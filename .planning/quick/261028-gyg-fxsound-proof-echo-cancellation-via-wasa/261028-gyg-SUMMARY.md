@@ -106,3 +106,17 @@ None beyond the plan's threat model (T-gyg-01 to T-gyg-SC are covered: memory-on
 
 - src/snow/voice/loopback.py, tests/voice/test_loopback.py: present.
 - Commits 7b48386, 3f94d70, 64fa528: reachable from HEAD.
+
+## Orchestrator hardware run (2026-10-28, Snow quit, FxSound on, volume ~70 %, fan off)
+
+`uv run pytest -m hardware tests/hardware/test_bargein_loopback.py -q -s`: 7 passed (5 m 55 s). Room -57.3 dBFS, speaker burst -12.2 dBFS.
+
+- Snow alone, 3 long replies: 0 pauses, 0 cut-offs.
+- Coughs, clicks, noise bed: 0 pauses (enrolled and no-voiceprint).
+- Voice clip over Snow, no voiceprint: confirmed and cut (positive control).
+- Same clip with the user's voiceprint: rejected twice by speaker (0.22, 0.20), so a stranger's voice cannot cut Snow.
+- FxSound-style scenarios, loopback and render reference: 0 pauses each (the simulated enhancer is milder than the real one).
+
+Live check before this run, FxSound on, 45 % volume, fan on: 0 self-pauses in about 50 s of speech (5 in 3 min before the fix); 2/2 real interruptions confirmed.
+
+A first attempt crashed (0xC0000005: Moonshine's onnxruntime 1.23 loaded before sherpa); fixed in b7e8eec by loading sherpa-onnx in `snow/voice/__init__.py`.
