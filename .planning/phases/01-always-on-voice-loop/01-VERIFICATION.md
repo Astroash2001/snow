@@ -1,7 +1,7 @@
 ---
 phase: 01-always-on-voice-loop
-verified: 2026-10-28T09:00:00Z
-status: human_needed
+verified: 2026-10-28T12:00:00Z
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .github/workflows/ci.yml
@@ -74,31 +74,41 @@ covered_files:
   - config/models.toml
   - config/tts.toml
   - config/voice.toml
+  - hud/playwright.config.ts
   - src/snow/brain/chain.py
   - src/snow/config/secrets.py
   - src/snow/hub/autostart.py
   - src/snow/hub/supervisor.py
+  - src/snow/voice/__init__.py
+  - src/snow/voice/__main__.py
+  - src/snow/voice/aec.py
+  - src/snow/voice/config.py
+  - src/snow/voice/loopback.py
   - src/snow/voice/pipeline.py
-covered_digest: "v3:sha256:b3960552f833c1ef9d58415c65dec116c3cf6e8a3aa7009d5730c71a0a2a6a28"
+  - tests/test_cli.py
+  - tests/voice/test_loopback.py
+covered_digest: "v3:sha256:34699bddf11af9e0c208d3dbeb0831776c1046828d469ed82e3be1e3649d4f68"
 behavior_unverified: 1
 overrides_applied: 0
 behavior_unverified_items:
   - truth: "After the user logs in to Windows, Snow is already running (CORE-01)"
     test: "Run `uv run snow install-autostart`, sign out and back in to Windows"
     expected: "Snow's hub, voice and brain workers and the mini orb are up with no manual launch, and the Health panel shows no Down row"
-    why_human: "Only the generated Task Scheduler script text is unit-tested (tests/hub/test_autostart.py). UAT test 1 started Snow with `uv run snow run`, not through a real logon. A query for a registered `Snow` task returned nothing from this verifier's shell, so install state on the user's machine is unknown."
-human_verification:
-  - test: "Logon autostart (CORE-01, SC1)"
-    expected: "After a real Windows sign-in, Snow is running and listening for 'Hey Snow' without any manual start"
-    why_human: "A real logon cannot be exercised by a unit test, and no UAT row covers it"
+    why_human: "Only the generated Task Scheduler script text is unit-tested (tests/hub/test_autostart.py). Accepted untested by the user on 2026-10-28 (see Acknowledged Gaps)."
+re_verification:
+  previous_status: human_needed
+  previous_score: 5/5
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 1: Always-On Voice Loop Verification Report
 
 **Phase Goal:** As a developer, I want to wake Snow by voice and talk with it naturally, so that I can speak to my PC instead of typing.
-**Verified:** 2026-10-28
-**Status:** human_needed
-**Re-verification:** No, initial verification
+**Verified:** 2026-10-28 (re-verified after quick 261028-gyg and later commits)
+**Status:** passed
+**Re-verification:** Yes, covered source files changed since the first report (commit 974c356)
 
 ## Goal Achievement
 
@@ -122,8 +132,10 @@ All 33 plans have SUMMARYs. The files above (pipeline, chain, supervisor, autost
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Full Python suite (excluding hardware, gpu, network markers per `pyproject.toml`) | `uv run pytest -q` | 634 passed, 20 deselected, 1 error | PASS with one environmental error (see Anti-Patterns) |
-| CLI tests alone | `uv run pytest tests/test_cli.py -q` | 4 passed, 1 error (same fixture) | Environmental |
+| Full Python suite (excluding hardware, gpu, network markers per `pyproject.toml`) | `uv run pytest -q` | 665 passed, 22 deselected, 0 errors | PASS |
+| New and changed tests | `uv run pytest tests/voice/test_loopback.py tests/test_cli.py tests/hub/test_autostart.py -q` | 47 passed | PASS |
+| Lint, format, types | `uv run ruff check src tests`, `ruff format --check`, `pyright src/snow/voice` | all clean, 0 errors | PASS |
+| CI | `gh run list` | run 40655415486 on 6f1ea22 green (run 40653137667 on cb834e7, a docs-only commit, failed and is superseded) | PASS |
 
 ### Requirements Coverage
 
@@ -162,30 +174,34 @@ Every ID in the ROADMAP list was found in at least one PLAN `requirements:` fiel
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| `tests/test_cli.py` | 107-115 | `launched_hub` fixture does not set `SNOW_HUB_MUTEX`, so it fails with "hub exited early" whenever a real Snow hub is running in the same logon session | Warning | Environmental, not a product defect. The error reproduced here only because the user's live Snow was running. CI runners have no hub, so CI is unaffected. Fix: copy the unique-mutex env used in `tests/hub/test_retention.py:86`. |
-| (repo) | n/a | 49 local commits are unpushed (HEAD is ahead of `origin/main` at 690c6b5) | Info | The quick-task commits have not run on GitHub CI. The local pre-push gate will run them on push. The caller states local CI-equivalent is green; this verifier's own run was 634 passed plus the one environmental error above. |
+| `tests/test_cli.py` | 108-114 | `launched_hub` previously lacked its own `SNOW_HUB_MUTEX` | Resolved | Commit 536aee7 gives it a unique mutex; the earlier environmental error is gone (full suite 0 errors with the user's Snow running) |
+| `tests/test_cli.py` | 113 | `f"Local\SnowHubTest..."` has an unescaped backslash in a non-raw string | Info | Ruff and pyright pass and the test passes; a raw string would be cleaner |
 
-No TBD/FIXME/XXX debt markers were searched beyond the key files; none are reported by the UAT or SUMMARYs.
+A grep for TBD/FIXME/XXX over `src/snow/voice`, `hub`, `brain`, `config`, `config/` and `tests/voice/test_loopback.py` found none.
 
 ### Human Verification Required
 
-#### 1. Windows logon autostart
-
-**Test:** Run `uv run snow install-autostart`, sign out of Windows, sign back in.
-**Expected:** Snow starts by itself (hub, voice, brain, mini orb); "Hey Snow" works; Health shows no Down row.
-**Why human:** A real logon is not reachable from a unit test, and no UAT row covers it.
+None outstanding. The Windows logon autostart check was accepted untested by the user (see Acknowledged Gaps).
 
 ### Accepted Limits (not gaps)
 
 - UAT 13 (non-Kokoro voices) and UAT 14 (far-field wake, measured 20/50) are user-waived decisions.
-- Backlog 999.1 (Kokoro on the GPU) and 999.2 (FxSound-proof echo cancellation); orb polish moves to Phase 6.
+- Backlog 999.1 (Kokoro on the GPU); orb polish moves to Phase 6. Backlog 999.2 (FxSound-proof echo cancellation) is now done, see below.
 - Misheard words from residual echo of Snow's own voice are reduced by speaker-verified barge-in; full speaker verification gating belongs to Phase 2.
+
+### Changes Since the First Report
+
+Quick 261028-gyg feeds the echo canceller a WASAPI loopback reference (VOIC-06). Verified in code: `src/snow/voice/loopback.py` (`LoopbackReference`, `pick_endpoint`) is imported and started in `pipeline.py` when `audio.aec_reference == "loopback"` and closed on shutdown; `aec.py` exposes `use_loopback`, `loopback_block`, `loopback_stale`; it falls back to the render reference on missing, lost, ambiguous or silently dead loopback, logging the loss before the switch; audio stays in memory only. `config/voice.toml` enables it, and the model default stays `render`. `tests/voice/test_loopback.py` passes. The hardware loopback suite (7/7 with FxSound on, per the quick SUMMARY) is a user-run result and was not re-run by this verifier. The wake-only fallback was removed (3baf5f5), sherpa-onnx now loads in `snow/voice/__init__.py` (b7e8eec), and CI-only Playwright retries were added; none change a roadmap criterion.
 
 ### Gaps Summary
 
-No gaps. The phase goal is delivered: UAT shows wake, natural talk, barge-in, mute, sleep, tone matching and provider failover working live, and the code, configuration and tests back each roadmap criterion. The only open item is a one-time live check of the Windows logon autostart, which is why the status is `human_needed` rather than `passed`.
+No gaps. The phase goal is delivered: UAT shows wake, natural talk, barge-in, mute, sleep, tone matching and provider failover working live, and the code, configuration and tests back each roadmap criterion. The one open item, a live check of the Windows logon autostart, was accepted untested by the user on 2026-10-28 and is recorded under Acknowledged Gaps, so the status is `passed`.
 
 ---
 
 _Verified: 2026-10-28_
 _Verifier: Claude (gsd-verifier)_
+
+## Acknowledged Gaps
+
+- CORE-01 / success criterion 1: Windows logon autostart (`uv run snow install-autostart`, then a sign-out and sign-in) was not run live. The user accepted it untested on 2026-10-28 ("ok i think it will work"). Generated Task Scheduler script is unit-tested.
