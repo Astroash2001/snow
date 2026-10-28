@@ -1,11 +1,5 @@
 """`python -m snow.voice`: the voice worker (heartbeats come from the HubClient)."""
 
-# Three onnxruntime.dll builds share this process (Moonshine 1.23, onnxruntime 1.24,
-# sherpa-onnx 1.28) and Windows reuses the first one loaded by name. sherpa needs
-# ORT API 28, which only its own DLL has; the others accept it. So it loads first,
-# or the worker dies with an access violation (2026-10-27).
-import sherpa_onnx  # noqa: F401, I001  # pyright: ignore[reportMissingTypeStubs, reportUnusedImport]
-
 import asyncio
 
 from snow.common.hubclient import HubClient
