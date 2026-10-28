@@ -38,6 +38,7 @@ from snow.contracts.wire import Command, MuteSet, Snapshot
 from snow.voice.aec import EchoCanceller
 from snow.voice.bargein import decide, echo_ratio, words
 from snow.voice.config import VoiceConfig
+from snow.voice.loopback import LoopbackReference
 from snow.voice.phrases import match_command, strip_wake
 from snow.voice.playout import Playout, StreamFactory, device_rate
 from snow.voice.polish import Polish
@@ -190,6 +191,7 @@ class VoicePipeline:
         # Echo cancellation (VOIC-06): only the worker's live mic turns it on.
         self._echo_cancel = echo_cancel
         self._aec: EchoCanceller | None = None
+        self._loopback: LoopbackReference | None = None
         self._tts_ready: asyncio.Event
         self._playout: Playout | None = None
         self._chunker = SentenceChunker()
@@ -361,6 +363,8 @@ class VoicePipeline:
             self._tts.stop()
         if self._playout is not None:
             self._playout.close()
+        if self._loopback is not None:
+            self._loopback.close()
         if self._aec is not None:
             self._aec.close()
         for task in [self._publisher_task, *self._tasks]:
@@ -547,6 +551,16 @@ class VoicePipeline:
             aec = self._aec
             if aec is not None:
                 self._engine.echo_warming = aec.warming
+                a = self._cfg.audio
+                if (
+                    a.aec_reference == "loopback"
+                ):  # its thread logs which reference is live
+                    self._loopback = LoopbackReference(
+                        aec, a.aec_reference_device, a.output_enhancers
+                    )
+                    self._loopback.start()
+                else:
+                    log.info("aec_reference=render reason=config")
             self._playout = Playout(
                 rate,
                 self._tts_cfg.playout,

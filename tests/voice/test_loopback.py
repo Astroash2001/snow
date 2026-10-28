@@ -18,9 +18,14 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 import soxr
+from pydantic import ValidationError
 
+from snow.config.settings import load_config
 from snow.voice.aec import EchoCanceller
+from snow.voice.config import AudioConfig, VoiceConfig
 from snow.voice.loopback import LoopbackReference, is_enhancer, pick_endpoint
+from tests.voice.conftest import CFG, FakeGroq, FakeLoopback
+from tests.voice.test_bargein import HoldEngine, make_rig
 from tests.voice.test_echo_cancel import (
     FRAME,
     MIN_RUN_MS,
@@ -552,3 +557,58 @@ def test_a_whole_loopback_session_writes_nothing_and_logs_no_audio(
     assert mine
     assert all(r.getMessage().startswith("aec_") for r in mine)
     assert all(len(r.getMessage()) < 200 for r in mine)
+
+
+# --- wiring: the live pipeline -------------------------------------------------------
+
+
+async def test_the_pipeline_starts_one_loopback_for_its_canceller_and_closes_it(
+    groq: FakeGroq, loopbacks: list[FakeLoopback]
+) -> None:
+    rig = await make_rig(groq, HoldEngine(hold_from=2), echo_cancel=True)
+    (loop,) = loopbacks
+    assert loop.aec is rig.pipeline._aec  # noqa: SLF001
+    assert (loop.device, loop.enhancers) == ("", ["FxSound"])
+    assert loop.started and not loop.closed
+    await rig.pipeline.stop()
+    assert loop.closed
+
+
+async def test_a_render_reference_in_the_config_makes_no_loopback(
+    groq: FakeGroq,
+    loopbacks: list[FakeLoopback],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    audio = CFG.audio.model_copy(update={"aec_reference": "render"})
+    monkeypatch.setattr(
+        "tests.voice.test_bargein.CFG", CFG.model_copy(update={"audio": audio})
+    )
+    with caplog.at_level(logging.INFO, logger="snow.voice"):
+        rig = await make_rig(groq, HoldEngine(hold_from=2), echo_cancel=True)
+    assert loopbacks == []
+    assert caplog.text.count("aec_reference=render reason=config") == 1
+    await rig.pipeline.stop()
+
+
+async def test_no_loopback_without_echo_cancellation(
+    groq: FakeGroq, loopbacks: list[FakeLoopback]
+) -> None:
+    rig = await make_rig(groq, HoldEngine(hold_from=2))
+    assert loopbacks == []
+    await rig.pipeline.stop()
+
+
+def test_voice_toml_opts_in_to_the_loopback() -> None:
+    a = load_config("voice.toml", VoiceConfig).audio
+    assert (
+        a.aec_reference,
+        a.aec_reference_device,
+        a.output_enhancers,
+        a.enhancer_disables_bargein,
+    ) == ("loopback", "", ["FxSound"], False)
+
+
+def test_an_unknown_reference_fails_validation() -> None:
+    with pytest.raises(ValidationError):
+        AudioConfig(aec_reference="loop")  # type: ignore[arg-type]

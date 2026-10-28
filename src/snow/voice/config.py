@@ -13,6 +13,15 @@ class AudioConfig(_Strict):
     input_device: str = ""
     sample_rate: int = 16000
     frame_samples: int = 1280
+    # Where the echo canceller learns what the speakers play. The model default keeps
+    # the old behaviour for a config without the key; voice.toml opts in.
+    aec_reference: Literal["loopback", "render"] = "render"
+    aec_reference_device: str = ""  # part of a speaker endpoint's name; "" = automatic
+    # Output enhancers (FxSound...) are virtual outputs: Snow's own audio is changed
+    # after it leaves Snow, so the loopback must read the real speakers behind them.
+    output_enhancers: list[str] = []
+    # With an enhancer and no live loopback, only "Hey Snow" interrupts Snow.
+    enhancer_disables_bargein: bool = False
 
 
 class WakeConfig(_Strict):
