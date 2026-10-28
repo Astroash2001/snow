@@ -185,6 +185,7 @@ class FakeGroq:
 def no_device_rate(monkeypatch: pytest.MonkeyPatch) -> None:
     """The voice keeps its own rate in tests: no real audio device is ever queried."""
     monkeypatch.setattr("snow.voice.pipeline.device_rate", lambda: None)
+    monkeypatch.setattr("snow.voice.pipeline.default_output_name", lambda: "")
 
 
 class FakeLoopback:

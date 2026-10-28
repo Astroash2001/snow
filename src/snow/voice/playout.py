@@ -95,6 +95,19 @@ def device_rate() -> int | None:
         return None
 
 
+def default_output_name() -> str:
+    """The WASAPI default output's name, or "" when it cannot be read."""
+    # shortcut: read once at voice load; a default switched later (FxSound turned on or
+    # off) is seen at the next restart, re-read on device change if that ever matters
+    try:
+        index = _wasapi_output()
+        if index is None or index < 0:
+            return ""
+        return str(sd.query_devices(index)["name"])  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+    except Exception:  # noqa: BLE001 - no usable device: no enhancer is assumed
+        return ""
+
+
 def level_of(block: npt.NDArray[np.float32]) -> float:
     """RMS of a block mapped from -60..0 dBFS to 0..1 (the HUD's audio.level)."""
     rms = float(np.sqrt(np.mean(np.square(block, dtype=np.float64))))
