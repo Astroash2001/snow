@@ -198,6 +198,7 @@ Notes:
 **UI hint**: yes
 
 Notes:
+- Finding files by voice: use voidtools Everything (free, instant filename search on Windows) behind the policy gate (discussion 2026-10-28).
 - Show-the-work panels (HUD-13): the app's UI tree with the element being clicked highlighted, the file search (Everything results streaming in as a tree), and browser steps with screenshots.
 - Screen and web content is data, not instructions: the Phase 2 rule that any action originating from such content needs approval applies to every step here.
 - Research flag: UIPI and elevated windows, DPI and focus behaviour, the vision fallback chain decided 2026-10-14 (luna, Gemini Flash, qwen3.8-27b; support confirmed in the Phase 1 spike), and injection defence for screen reading.
@@ -283,7 +284,7 @@ Plans:
 
 ### Phase 999.3: Memory v1 (BACKLOG)
 
-**Goal:** [Captured for future planning] Parked until the whole project is complete; decide then whether to build it (user, 2026-10-28). A short user profile injected every turn, a self-updated profile with an audit trail and undo, daily summaries, evidence-backed recall (markdown as source of truth, FTS5 index). Not a v1 requirement. Sources: SEED-261019-mnj item 3, .planning/seeds/openclaw-snow-comparison.md.
+**Goal:** [Captured for future planning] Parked until the whole project is complete; decide then whether to build it (user, 2026-10-28). Leaning (discussion 2026-10-28): plain markdown files as the source of truth with Snow's own search index, and Obsidian only as an optional viewer for the user. A short user profile injected every turn, a self-updated profile with an audit trail and undo, daily summaries, evidence-backed recall (markdown as source of truth, FTS5 index). Not a v1 requirement. Sources: SEED-261019-mnj item 3, .planning/seeds/openclaw-snow-comparison.md.
 **Requirements:** TBD
 **Plans:** 0 plans
 
@@ -311,6 +312,15 @@ Plans:
 ### Phase 999.6: Learned routines (BACKLOG)
 
 **Goal:** [Captured for future planning] Parked until the whole project is complete; decide then whether to build it (user, 2026-10-28). Snow learns repeated multi-step routines and offers to run them. Source: .planning/seeds/openclaw-snow-comparison.md.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.7: Clef intent router (BACKLOG)
+
+**Goal:** [Captured for future planning] User decision 2026-10-28: use Cloudflare's Clef (Apache-2.0 open weights; Clef-flash about 39 ms per decision, Jev-compatible API) to sort spoken commands (chat, start or steer an agent, stop, approve) before the LLM, replacing Jev from the screenshot plan. Decide local Clef-flash vs Cloudflare-hosted when this is reached (hosted means Cloudflare sees transcripts, so it needs a trusted-provider decision). Measure on the labelled spoken-command set from Phase 2 (02-17). Sources: .planning/seeds/screenshot-plan-review.md and the Clef benchmark articles cited in the 2026-10-28 discussion.
 **Requirements:** TBD
 **Plans:** 0 plans
 
