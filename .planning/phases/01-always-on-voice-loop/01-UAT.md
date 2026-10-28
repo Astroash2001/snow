@@ -88,7 +88,8 @@ reason: User waived the far-field target 2026-10-25 (works at the desk). Measure
 
 ### 15. Snow hears the words actually said
 expected: The You row shows what the user said; words they never said never appear.
-result: issue
+result: pass
+retest: "2026-10-28 sessions: no prompt-echo or self-echo turns; prompt-echo drop (b004a83) and speaker-verified barge-in (261026-wvr) in place"
 reported: "Sometimes it identifies my words as wrong: the clear words that I am not saying."
 severity: major
 
@@ -103,7 +104,7 @@ severity: major
 ## Summary
 
 total: 16
-passed: 13
+passed: 14
 issues: 0
 pending: 0
 skipped: 2
