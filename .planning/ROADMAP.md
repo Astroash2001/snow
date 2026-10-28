@@ -12,7 +12,7 @@ Snow is built in the order that lets it help build itself. Phase 1 delivers an a
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Always-On Voice Loop** - Say "Hey Snow", talk naturally, hear a fast human reply; event bus, supervisor, secrets store and CI in place
+- [x] **Phase 1: Always-On Voice Loop** - Say "Hey Snow", talk naturally, hear a fast human reply; event bus, supervisor, secrets store and CI in place
 - [ ] **Phase 2: Voice-Driven Claude Code with Safety Gate** - Start, instruct, answer and stop Claude Code by voice with risk tiers, fail-closed approvals, kill switch and speaker verification (Snow starts building Snow)
 - [ ] **Phase 3: Steerable and Reviewable Agent Work** - Ask for status, redirect mid-task, hear fact-based summaries, follow the activity stream, accept or discard worktree-isolated changes
 - [ ] **Phase 4: Hand-off & Phone** - Walk away while Snow works; Telegram notifications, one-tap approvals and replies over Tailscale; task board and on-request brief
@@ -241,7 +241,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Always-On Voice Loop | 31/33 | In Progress | - |
+| 1. Always-On Voice Loop | 33/33 | Complete | 2026-10-28 |
 | 2. Voice-Driven Claude Code with Safety Gate | 0/TBD | Not started | - |
 | 3. Steerable and Reviewable Agent Work | 0/TBD | Not started | - |
 | 4. Hand-off & Phone | 0/TBD | Not started | - |
@@ -260,9 +260,47 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 (Phase 6 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)
 
-### Phase 999.2: FxSound-proof echo cancellation (BACKLOG)
+### Phase 999.2: FxSound-proof echo cancellation (DONE)
+
+**Status:** Done 2026-10-28 in quick task 261028-gyg (WASAPI loopback reference; hardware suite 7/7 with FxSound on).
 
 **Goal:** [Captured for future planning] Optional, only when the user asks. The user keeps FxSound on (laptop speakers are weak), but FxSound changes Snow's audio after Snow sends it, so the WebRTC AEC3 reference (pre-FxSound) no longer matches the mic echo. In the 2026-10-28 test this caused 5 self-triggered pauses in 3 minutes with FxSound on and 0 with it off. Fix: feed the canceller a WASAPI loopback capture of the real speaker endpoint (post-FxSound), held in memory only and never stored. This also cancels any other audio the laptop plays. It needs one new package (PyAudioWPatch, or soundcard) with the user's approval. Verify with the loopback barge-in suite and earshot. Fallback: with an output enhancer detected, only "Hey Snow" interrupts. Estimate: half a day. Source: .planning/seeds/openjarvis-gap-study.md step 1.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.3: Memory v1 (BACKLOG)
+
+**Goal:** [Captured for future planning] Parked until the whole project is complete; decide then whether to build it (user, 2026-10-28). A short user profile injected every turn, a self-updated profile with an audit trail and undo, daily summaries, evidence-backed recall (markdown as source of truth, FTS5 index). Not a v1 requirement. Sources: SEED-261019-mnj item 3, .planning/seeds/openclaw-snow-comparison.md.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.4: Reminders and "tell me when" (BACKLOG)
+
+**Goal:** [Captured for future planning] Parked until the whole project is complete; decide then whether to build it (user, 2026-10-28). Spoken reminders and a trigger when a task or agent finishes ("tell me when the build is done"), delivered by voice or phone. Source: .planning/seeds/openclaw-snow-comparison.md.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.5: Voice dictation into the focused app (BACKLOG)
+
+**Goal:** [Captured for future planning] Parked until the whole project is complete; decide then whether to build it (user, 2026-10-28). Speak text straight into whatever app has focus (key to replacing the keyboard). Source: .planning/seeds/openclaw-snow-comparison.md.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.6: Learned routines (BACKLOG)
+
+**Goal:** [Captured for future planning] Parked until the whole project is complete; decide then whether to build it (user, 2026-10-28). Snow learns repeated multi-step routines and offers to run them. Source: .planning/seeds/openclaw-snow-comparison.md.
 **Requirements:** TBD
 **Plans:** 0 plans
 
