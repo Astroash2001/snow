@@ -152,11 +152,11 @@ class LoopbackReference:
             return type(e).__name__
         finally:
             if live:
-                self._aec.use_loopback(False)
-                if not self._stop.is_set():
+                if not self._stop.is_set():  # log first: the switch is what is awaited
                     log.warning(
                         "aec_reference=render reason=loopback_lost device=%r", device
                     )
+                self._aec.use_loopback(False)
             for step in (
                 getattr(stream, "stop_stream", None),
                 getattr(stream, "close", None),
