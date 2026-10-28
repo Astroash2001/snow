@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Always-On Voice Loop
 status: executing
 stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-10-27T15:49:00.719Z"
+last_updated: "2026-10-28T07:30:16.545Z"
 last_activity: 2026-10-19
 last_activity_desc: Phase 01 execution started
-state_head: 9255bc9b004d4608f7cdac0ae0d687de818f33a8
+state_head: 3baf5f56ba92d37e439ff36dc9724a5c9a720b66
 progress:
   total_phases: 7
   completed_phases: 0
@@ -91,6 +91,7 @@ None yet.
 | 261026-nui | Snappy interruption: Hey Snow stops Snow at once, duck at 150 ms, gap-tolerant 400 ms barge-in, Jarvis answer rules (UAT G-01-5) | 2026-10-26 | 9f8ae7b | [261026-nui-snappy-jarvis-alexa-interruption-and-jar](./quick/261026-nui-snappy-jarvis-alexa-interruption-and-jar/) |
 | 261026-wvr | Robust Jarvis barge-in: pause first, words + echo check, TitaNet speaker verification, enroll-voice, loopback suite (hardware run pending) | 2026-10-27 | 0851730 | [261026-wvr-robust-jarvis-style-barge-in-on-laptop-m](./quick/261026-wvr-robust-jarvis-style-barge-in-on-laptop-m/) |
 | 261027-rx2 | Instant fade-free stop on the user's voice; brain remembers only what was heard and that it was interrupted | 2026-10-27 | 9255bc9 | [261027-rx2-instant-stop-on-the-user-s-voice-plus-in](./quick/261027-rx2-instant-stop-on-the-user-s-voice-plus-in/) |
+| 261028-gyg | FxSound-proof echo cancellation: WASAPI loopback reference (PyAudioWPatch), render fallback; hardware run pending | 2026-10-28 | 3baf5f5 | [261028-gyg-fxsound-proof-echo-cancellation-via-wasa](./quick/261028-gyg-fxsound-proof-echo-cancellation-via-wasa/) |
 
 ## Deferred Items
 
