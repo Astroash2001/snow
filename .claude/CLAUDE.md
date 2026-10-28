@@ -361,3 +361,21 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 > Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
 > This section is managed by `generate-claude-profile` -- do not edit manually.
 <!-- GSD:profile-end -->
+
+## Shell Commands
+
+- Never `cd` in a command. Run from the project root and give paths from there (`sed -n 3p hud/src/renderer/src/orb/sphere.ts`, not `cd hud && sed -n 3p src/...`). Claude Code cannot check a `cd` target against the read block, so every `cd` triggers an approval prompt.
+- For tools that must run inside a folder, use their own directory flag instead of `cd`: `npm --prefix hud ...`, `git -C hud ...`, `uv --directory ...`.
+
+## Code Style: Ponytail (all code, every agent)
+
+User rule (2026-10-28): every agent that writes code here (the main session, GSD planners, executors, fixers) follows this.
+
+- Smallest complete change: solve the whole task with the least new code. No features, options, abstractions, wrappers or "for later" code nobody asked for.
+- Reuse first: an existing helper or pattern in this repo, then the standard library, then an installed dependency. Never add a dependency for a few lines (and new packages need the user's approval anyway).
+- Finish everything the change touches: callers, tests, fixtures, config. Lazy about the solution, never about the change.
+- Bug fix: find every caller first, fix the root cause once in the shared code.
+- Comment only the why the code cannot show. A shortcut with a known limit gets `# shortcut: <limit>, <when to upgrade>`.
+- New non-trivial logic leaves one small test or assert-based check. Trivial changes need none.
+- Never cut: validation at trust boundaries, error handling that prevents data loss, security, the calibration real hardware needs, or anything the user asked for.
+- In the final report: one or two lines on what was skipped or not checked, and any risk.
